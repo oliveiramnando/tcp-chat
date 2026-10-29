@@ -7,10 +7,42 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define MAX_CLIENT 5
+#include <vector>
+#include <thread>
+
+#define MAX_CLIENTS 5
 #define BUFFER_SIZE 1024
 
 using namespace std;
+
+void clientHandler(int clientSocket, vector<int>& clients)
+{
+    cout << "Accepted client connection" << endl;
+    
+    while (true)
+    {
+	char buffer[BUFFER_SIZE] = {};
+    	if (recv(clientSocket, buffer, sizeof(buffer), 0) < 0)
+    	{
+    		perror("Failed to recive data from client socket");
+    	}
+
+    	cout << buffer << endl;
+
+	for (int cli: clients)
+	{
+	    if (cli != clientSocket)
+	    {
+		if (send(cli, buffer, sizeof(buffer), 0) < 0)
+		{
+		    perror("Could not send message to client");
+		}
+	    }
+	}
+    }
+
+    close(clientSocket);
+}
 
 int main()
 {
@@ -40,30 +72,32 @@ int main()
     cout << "Socket bound to address" << endl;
 
     // listen for incoming connections
-    if (listen(serverSocket, 5) < 0)
+    if (listen(serverSocket, MAX_CLIENTS) < 0)
     {
 	perror("Failed to listen for incoming connections");
 	return 1;
     }
 
-    int clientSocket = accept(serverSocket, nullptr, nullptr);
-    if (clientSocket < 0)
+    vector<int> clients;
+
+    while (true)
     {
-	perror("Failed to accept client socket");
-	return 1;
+	// accept client connection
+	int clientSocket = accept(serverSocket, nullptr, nullptr);
+    	if (clientSocket < 0)
+    	{
+    	    perror("Failed to accept client socket");
+    	    return 1;
+    	}
+	
+	// add client to vector, let thread handle that client
+	clients.push_back(clientSocket);
+	thread cli(clientHandler, clientSocket, ref(clients));
+
+	cli.detach();
     }
 
-    cout << "Accepted client connection" << endl;
-
-    char buffer[BUFFER_SIZE] = {0};
-    if (recv(clientSocket, buffer, sizeof(buffer), 0) < 0)
-    {
-	perror("Failed to recive data from client socket");
-	return 1;
-    }
-
-    cout << "message from client " << buffer << endl;
-
+    // close socket
     close(serverSocket);
 
     cout << "Server socket closed" << endl;
