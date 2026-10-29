@@ -31,21 +31,42 @@ int main()
     serverAddr.sin_addr.s_addr = INADDR_ANY; 	// works only on server, where it means "listen on all my address"
     
     // bind socket to address
-    ::bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+    if (::bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0)
+    {
+	perror("Failed to bind socket to server address");
+	return 1;
+    }
 
     cout << "Socket bound to address" << endl;
 
     // listen for incoming connections
-    listen(serverSocket, 5);
+    if (listen(serverSocket, 5) < 0)
+    {
+	perror("Failed to listen for incoming connections");
+	return 1;
+    }
 
     int clientSocket = accept(serverSocket, nullptr, nullptr);
+    if (clientSocket < 0)
+    {
+	perror("Failed to accept client socket");
+	return 1;
+    }
+
+    cout << "Accepted client connection" << endl;
 
     char buffer[BUFFER_SIZE] = {0};
-    recv(clientSocket, buffer, sizeof(buffer), 0);
+    if (recv(clientSocket, buffer, sizeof(buffer), 0) < 0)
+    {
+	perror("Failed to recive data from client socket");
+	return 1;
+    }
 
     cout << "message from client " << buffer << endl;
 
     close(serverSocket);
+
+    cout << "Server socket closed" << endl;
 
     return 0;
 }
