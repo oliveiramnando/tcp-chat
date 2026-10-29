@@ -22,22 +22,35 @@ void clientHandler(int clientSocket, vector<int>& clients)
     while (true)
     {
 	char buffer[BUFFER_SIZE] = {};
-    	if (recv(clientSocket, buffer, sizeof(buffer), 0) < 0)
+
+	ssize_t bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+    	if (bytesReceived < 0)
     	{
-    		perror("Failed to recive data from client socket");
+    	    perror("Failed to recive data from client socket");
     	}
 
-    	cout << buffer << endl;
+	if (bytesReceived == 0)
+	{
+	    cout << "Client disconnected!" << endl;
+	    break;
+	}
+
+    	cout.write(buffer, bytesReceived);	// writes specific number of bytes to standard output
+	cout << endl;
 
 	for (int cli: clients)
 	{
-	    if (cli != clientSocket)
+	    if (cli == clientSocket)
 	    {
-		if (send(cli, buffer, sizeof(buffer), 0) < 0)
-		{
-		    perror("Could not send message to client");
-		}
+		continue;
 	    }
+	    
+	    ssize_t bytesSent = send(cli, buffer, static_cast<size_t>(bytesReceived), 0); 
+	    if (bytesSent < 0)
+	    {
+		perror("Could not send message to client");
+	    }
+	    
 	}
     }
 
