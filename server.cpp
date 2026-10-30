@@ -24,10 +24,10 @@ void clientHandler(int clientSocket, vector<int>& clients)
 	char buffer[BUFFER_SIZE] = {};
 
 	ssize_t bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-    	if (bytesReceived < 0)
-    	{
-    	    perror("Failed to recive data from client socket");
-    	}
+	if (bytesReceived < 0)
+	{
+	    perror("Failed to recive data from client socket");
+	}
 
 	if (bytesReceived == 0)
 	{
@@ -35,7 +35,7 @@ void clientHandler(int clientSocket, vector<int>& clients)
 	    break;
 	}
 
-    	cout.write(buffer, bytesReceived);	// writes specific number of bytes to standard output
+	cout.write(buffer, bytesReceived);	// writes specific number of bytes to standard output
 	cout << endl;
 
 	for (int cli: clients)
@@ -50,10 +50,8 @@ void clientHandler(int clientSocket, vector<int>& clients)
 	    {
 		perror("Could not send message to client");
 	    }
-	    
 	}
     }
-
     close(clientSocket);
 }
 
@@ -97,11 +95,11 @@ int main()
     {
 	// accept client connection
 	int clientSocket = accept(serverSocket, nullptr, nullptr);
-    	if (clientSocket < 0)
-    	{
-    	    perror("Failed to accept client socket");
-    	    return 1;
-    	}
+	if (clientSocket < 0)
+	{
+	    perror("Failed to accept client socket");
+	    return 1;
+	}
 	
 	// add client to vector, let thread handle that client
 	clients.push_back(clientSocket);
