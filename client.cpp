@@ -10,9 +10,13 @@
 #include <string>
 #include <thread>
 
-#define BUFFER_SIZE 1024
+#include <mutex>
+
+#define BUFFER_SIZE 8192
 
 using namespace std;
+
+mutex terminalMutex;
 
 void receiveMsg(int clientSocket)
 {
@@ -23,28 +27,57 @@ void receiveMsg(int clientSocket)
 	if (dataSize < 0)
 	{
 	    perror("Failed to receive message from server");
+	    break;
+	}
+
+	if (dataSize == 0)
+	{
+	    cout << "Server Disconnected!" << endl;
+	    break;
 	}
 	
 	string raw(buffer, static_cast<size_t>(dataSize));
-	cout << raw << endl;
+
+	size_t colonIdx = raw.find(" : ");
+	string name = raw.substr(0, colonIdx);
+	string message = raw.substr(colonIdx + 3);
+	    
+	{
+	    lock_guard<mutex> lock(terminalMutex);
+	    cout << "\r\033[K";
+	    cout << "\033[94m" << name << "\033[0m : " << message << endl;
+	    cout << "\033[92myou\033[0m : " << flush;
+	}
     }
+
+    close(clientSocket);
 }
 
 void sendMsg(int clientSocket)
 {
+    cout << "Enter your chat name" << endl;
+    string name;
+    getline(cin, name);
+
+    string message;
+
     while (true)
     {
 	// send data to server
-    	string message;
-	cout << "Message : " << endl;
+	{
+	    lock_guard<mutex> lock(terminalMutex);
+	    cout << "\r\033[K";
+	    cout << "\033[92myou\033[0m : " << flush;
+	}
+
 	getline(cin, message);
 
-    	if (::send(clientSocket, message.c_str(), sizeof(message), 0) < 0)
+	message = name + " : " + message;
+
+    	if (::send(clientSocket, message.c_str(), message.size(), 0) < 0)
     	{
     	    perror("Failed to send message");
     	}
-
-    	cout << "Message sent to server" << endl;
     }
 }
 
