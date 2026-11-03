@@ -29,6 +29,9 @@ server: $(SERVER)
 client: $(CLIENT)
 	./$(CLIENT)
 
+terminal: terminal_test.cpp
+	$(CXX) $(CXXFLAGS) $< -o $@
+
 # Debug build
 debug: CXXFLAGS += -g -O0 -DDEBUG
 debug: clean all
