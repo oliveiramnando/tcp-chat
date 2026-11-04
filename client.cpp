@@ -100,6 +100,16 @@ void receiveMsg(int clientSocket, const unsigned char* key)
         string nameAndMessage(decryptedMessage.begin(), decryptedMessage.end());
 
 		size_t colonIdx = nameAndMessage.find(" : ");
+        if (colonIdx == string::npos)
+        {
+            {
+                lock_guard<mutex> lock(terminalMutex);
+                cout << "\r\033[K";
+                cerr << "Client sender does not have a name" << endl;
+                cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+            }
+            continue;
+        }
 		string name = nameAndMessage.substr(0, colonIdx);
 		string message = nameAndMessage.substr(colonIdx + 3);
 			
@@ -107,7 +117,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 			lock_guard<mutex> lock(terminalMutex);
 			cout << "\r\033[K";
 			cout << "\033[94m" << name << "\033[0m : " << message << endl;
-			cout << "\033[92myou\033[0m : " << flush;
+			cout << "\033[92myou\033[0m > " << inputBuffer << flush;
 		}
     }
 }
@@ -115,7 +125,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 void sendMsg(int clientSocket, const string& name, const unsigned char* key)
 {
 
-	cout << "You : " << flush;
+	cout << "\033[92myou\033[0m > " << flush;
     char ch;
 
     while (read(STDIN_FILENO, &ch, 1) == 1)
@@ -130,6 +140,7 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                 {
                     cout << "\r\033[2K";
                     cout << "Exiting program..." << endl;
+                    quitting = true;
                     shutdown(clientSocket, SHUT_RDWR);
                     break;
                 }
@@ -160,6 +171,8 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                 }              
 
                 uint32_t encryptedLength = htonl(static_cast<uint32_t>(encrypted.size()));
+
+                // send buffer = [4 bytes for length][nonce + ciphertext + tag]
                 vector<char> sendBuffer(sizeof(uint32_t) + encrypted.size());
 
                 memcpy(sendBuffer.data(), &encryptedLength, sizeof(encryptedLength));
@@ -194,7 +207,6 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
 
 	        cout << "\r\033[K";
 	        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-
         }
     }
 }
@@ -210,6 +222,7 @@ int main()
         return 1;
     }
 
+    // generate and load key
     string keyFile = "chat.key";
     if (!filesystem::exists(keyFile))
     {
@@ -227,7 +240,6 @@ int main()
         cerr << "Failed to load key from file: " << keyFile << endl;
         return 1;
     }
-
 
     // create client socket
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -262,17 +274,21 @@ int main()
     string name;
     getline(cin, name);
 
+    cout << endl;
+
     // set terminal to raw mode
     tcgetattr(STDIN_FILENO, &origTerminal);
+    atexit(restoreTerminal);
     termios modTerminal = origTerminal;
     modTerminal.c_lflag &= ~(ICANON | ECHO | ISIG);
     modTerminal.c_cc[VMIN] = 1;
 
     tcsetattr(STDIN_FILENO, TCSANOW, &modTerminal);
 
+    // threads
     thread threadSend(sendMsg, clientSocket, name, key);
     thread threadReceive(receiveMsg, clientSocket, key);
-    
+
     threadSend.join();
     threadReceive.join();
     
