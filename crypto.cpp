@@ -74,3 +74,22 @@ bool encrypt(const string& message, vector<unsigned char>* encrypted, const unsi
     return true;
 }
 
+vector<unsigned char> decrypt(uint32_t encryptedLength, const string& encryptedMessage, const unsigned char* key)
+{
+    // Nonce extraction
+    unsigned char nonce[crypto_aead_xchacha20poly1305_ietf_NPUBBYTES];
+    memcpy(nonce, encryptedMessage.data(), sizeof(nonce));
+
+    // Encrypted message + tag extraction
+    uint32_t messageTagLength = encryptedLength - sizeof(nonce);   // length of message + tag
+    vector<unsigned char> encrypted(messageTagLength);
+    memcpy(encrypted.data(), encryptedMessage.data() + sizeof(nonce), messageTagLength);
+
+    // Decryption
+    vector<unsigned char> decryptedMessage(messageTagLength - crypto_aead_xchacha20poly1305_ietf_ABYTES); // length of plaintext
+    crypto_aead_xchacha20poly1305_ietf_decrypt(decryptedMessage.data(), nullptr, nullptr, encrypted.data(), messageTagLength, nullptr, 0, nonce, key);
+
+    return decryptedMessage;
+}
+
+
