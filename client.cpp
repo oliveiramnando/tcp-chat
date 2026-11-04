@@ -49,23 +49,27 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 		}
 
 		// convert buffer to string; parse length and message
-        uint32_t messageLength;
-        memcpy(&messageLength, lengthBytes, sizeof(messageLength));
-        messageLength = ntohl(messageLength); 
+        uint32_t encryptedLength;
+        memcpy(&encryptedLength, lengthBytes, sizeof(encryptedLength));
+        encryptedLength = ntohl(encryptedLength); 
 
-        if (messageLength == 0 || messageLength > MAX_MESSAGE_SIZE)
+        if (encryptedLength == 0 || encryptedLength > MAX_MESSAGE_SIZE)
         {
             cerr << "Invalid message length received from server" << endl;
             break;
         }
 
         // read rest of data using message length to ensure all bytes get processed
-        string nameAndMessage(messageLength, '\0');
-        if (!readNBytes(clientSocket, nameAndMessage.data(), messageLength))
+        string encryptedMessage(encryptedLength, '\0');
+        if (!readNBytes(clientSocket, encryptedMessage.data(), encryptedLength))
         {
             cerr << "Failed to read message from server" << endl;
             break;
         }
+
+        // decrypt message here
+        auto decryptedMessage = decrypt(encryptedLength, encryptedMessage, key);
+        string nameAndMessage(decryptedMessage.begin(), decryptedMessage.end());
 
 		size_t colonIdx = nameAndMessage.find(" : ");
 		string name = nameAndMessage.substr(0, colonIdx);
