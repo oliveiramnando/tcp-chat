@@ -7,8 +7,8 @@ all: server client
 server: server.cpp net.cpp net.hpp
 	$(CXX) $(CXXFLAGS) server.cpp net.cpp -o server
 
-client: client.cpp net.cpp net.hpp
-	$(CXX) $(CXXFLAGS) client.cpp net.cpp -o client 
+client: client.cpp net.cpp net.hpp crypto.cpp crypto.hpp
+	$(CXX) $(CXXFLAGS) client.cpp net.cpp crypto.cpp -o client $(LDLIBS)
 
 clean:
 	rm -f server client 
