@@ -36,7 +36,7 @@ void restoreTerminal()
 }
 
 
-void receiveMsg(int clientSocket)
+void receiveMsg(int clientSocket, const unsigned char* key)
 {
     while (true)
     {
@@ -80,7 +80,7 @@ void receiveMsg(int clientSocket)
     }
 }
 
-void sendMsg(int clientSocket, const string& name)
+void sendMsg(int clientSocket, const string& name, const unsigned char* key)
 {
 
 	cout << "You : " << flush;
@@ -110,19 +110,28 @@ void sendMsg(int clientSocket, const string& name)
 
                 cout << "\r\033[2K";
 
-                string message = name + " : " + inputBuffer;
-                if (message.size() > MAX_MESSAGE_SIZE)
+                string message = name + " : " + inputBuffer; 
+
+                vector<unsigned char> encrypted(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES + message.size() + crypto_aead_xchacha20poly1305_ietf_ABYTES);
+                if (!encrypt(message, &encrypted, key))
                 {
-                    cerr << "Invalid Message Length" << endl;
+                    cerr << "Failed to encrypt" << endl;
                     cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
                     continue;
                 }
 
-                uint32_t messageLength = htonl(static_cast<uint32_t>(message.size()));
-                vector<char> sendBuffer(sizeof(uint32_t) + message.size());
+                if (encrypted.size() > MAX_MESSAGE_SIZE)
+                {
+                    cerr << "Invalid Message Length" << endl;
+                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                    continue;
+                }              
 
-                memcpy(sendBuffer.data(), &messageLength, sizeof(messageLength));
-                memcpy(sendBuffer.data() + sizeof(messageLength), message.c_str(), message.size());
+                uint32_t encryptedLength = htonl(static_cast<uint32_t>(encrypted.size()));
+                vector<char> sendBuffer(sizeof(uint32_t) + encrypted.size());
+
+                memcpy(sendBuffer.data(), &encryptedLength, sizeof(encryptedLength));
+                memcpy(sendBuffer.data() + sizeof(encryptedLength), encrypted.data(), encrypted.size());
 
 
                 if (!sendAll(clientSocket, sendBuffer.data(), sendBuffer.size()))
@@ -223,8 +232,8 @@ int main()
 
     tcsetattr(STDIN_FILENO, TCSANOW, &modTerminal);
 
-    thread threadSend(sendMsg, clientSocket, name);
-    thread threadReceive(receiveMsg, clientSocket);
+    thread threadSend(sendMsg, clientSocket, name, key);
+    thread threadReceive(receiveMsg, clientSocket, key);
     
     threadSend.join();
     threadReceive.join();
