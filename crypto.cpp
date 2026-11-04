@@ -64,7 +64,6 @@ bool encrypt(const string& message, vector<unsigned char>& encrypted, const unsi
                                                 reinterpret_cast<const unsigned char*>(message.data()), message.size(), 
                                                 nullptr, 0, nullptr, nonce, key) != 0)
     {
-        cerr << "Encryption failed" << endl;
         return false;
     }
     return true;
@@ -74,10 +73,14 @@ bool decrypt(vector<unsigned char>& decryptedMessage, const string& encryptedMes
 {
     // Nonce extraction
     unsigned char nonce[crypto_aead_xchacha20poly1305_ietf_NPUBBYTES];
+    if (encryptedMessage.size() < sizeof(nonce) + crypto_aead_xchacha20poly1305_ietf_ABYTES)
+    {
+        return false;
+    }
     memcpy(nonce, encryptedMessage.data(), sizeof(nonce));
 
     // Encrypted message + tag extraction
-    uint32_t messageTagLength = encryptedMessage.size() - sizeof(nonce);   // length of message + tag
+    size_t messageTagLength = encryptedMessage.size() - sizeof(nonce);   // length of message + tag
     vector<unsigned char> encrypted(messageTagLength);
     memcpy(encrypted.data(), encryptedMessage.data() + sizeof(nonce), messageTagLength);
 
