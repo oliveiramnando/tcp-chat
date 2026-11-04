@@ -15,10 +15,9 @@
 
 #include <thread>
 #include <mutex>
+#include <csignal>
 
 #include "net.hpp"
-
-#define BUFFER_SIZE 8192
 
 using namespace std;
 
@@ -37,25 +36,36 @@ void receiveMsg(int clientSocket)
 {
     while (true)
     {
-		char buffer[BUFFER_SIZE] = {};
-		ssize_t dataSize = recv(clientSocket, buffer, sizeof(buffer), 0);
-		if (dataSize < 0)
+        // Read prefix for message length
+		char lengthBytes[4] = {};
+		if (!readNBytes(clientSocket, lengthBytes, sizeof(uint32_t)))
 		{
-			perror("Failed to receive message from server");
+			cerr << "Failed to read message length from server" << endl;
 			break;
 		}
 
-		if (dataSize == 0)
-		{
-			cout << "Server Disconnected!" << endl;
-			break;
-		}
-		
-		string raw(buffer, static_cast<size_t>(dataSize));
+		// convert buffer to string; parse length and message
+        uint32_t messageLength;
+        memcpy(&messageLength, lengthBytes, sizeof(messageLength));
+        messageLength = ntohl(messageLength); 
 
-		size_t colonIdx = raw.find(" : ");
-		string name = raw.substr(0, colonIdx);
-		string message = raw.substr(colonIdx + 3);
+        if (messageLength == 0 || messageLength > MAX_MESSAGE_SIZE)
+        {
+            cerr << "Invalid message length received from server" << endl;
+            break;
+        }
+
+        // read rest of data using message length to ensure all bytes get processed
+        string nameAndMessage(messageLength, '\0');
+        if (!readNBytes(clientSocket, nameAndMessage.data(), messageLength))
+        {
+            cerr << "Failed to read message from server" << endl;
+            break;
+        }
+
+		size_t colonIdx = nameAndMessage.find(" : ");
+		string name = nameAndMessage.substr(0, colonIdx);
+		string message = nameAndMessage.substr(colonIdx + 3);
 			
 		{
 			lock_guard<mutex> lock(terminalMutex);
@@ -64,8 +74,6 @@ void receiveMsg(int clientSocket)
 			cout << "\033[92myou\033[0m : " << flush;
 		}
     }
-
-    close(clientSocket);
 }
 
 void sendMsg(int clientSocket, const string& name)
@@ -148,6 +156,8 @@ void sendMsg(int clientSocket, const string& name)
 
 int main()
 {
+    signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE signal to prevent abrupt termination
+
     // create client socket
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocket < 0)
@@ -159,10 +169,14 @@ int main()
     cout << "Client socket created" << endl;
 
     // define server address
-    sockaddr_in serverAddr;
+    sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(8080);
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    if (inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr) <= 0)
+    {
+        perror("Invalid server address");
+        return 1;
+    }
 
     // connect to server
     if (connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0)
@@ -185,7 +199,7 @@ int main()
 
     tcsetattr(STDIN_FILENO, TCSANOW, &modTerminal);
 
-    thread threadSend(sendMsg,clientSocket, name);
+    thread threadSend(sendMsg, clientSocket, name);
     thread threadReceive(receiveMsg, clientSocket);
     
     threadSend.join();
