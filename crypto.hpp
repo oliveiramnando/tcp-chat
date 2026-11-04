@@ -2,12 +2,15 @@
 #define CRYPTO_HPP
 
 #include <string>
+#include <vector>
 
 using namespace std;
 
 bool keyGen();
 
 bool loadKey(const string& filename, unsigned char* key);
+
+bool encrypt(const string& message, vector<unsigned char>* encrypted, const unsigned char* key);
 
 
 #endif
