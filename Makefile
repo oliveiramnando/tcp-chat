@@ -1,50 +1,16 @@
-CXX = clang++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Wconversion -Wsign-conversion -pedantic
+CXX      = g++
+CXXFLAGS = -std=c++20 -Wall -Wextra -g
+LDLIBS   = -lsodium
 
-# Directories
-BUILD_DIR = build
+all: server client
 
-# Executables
-SERVER = $(BUILD_DIR)/server
-CLIENT = $(BUILD_DIR)/client
+server: server.cpp net.cpp net.hpp
+	$(CXX) $(CXXFLAGS) server.cpp net.cpp -o server
 
-# Default: build both
-all: $(SERVER) $(CLIENT)
+client: client.cpp net.cpp net.hpp
+	$(CXX) $(CXXFLAGS) client.cpp net.cpp -o client 
 
-# Build server
-$(SERVER): server.cpp
-	mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $< -o $@
-
-# Build client
-$(CLIENT): client.cpp
-	mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $< -o $@
-
-# Run server
-server: $(SERVER)
-	./$(SERVER)
-
-# Run client
-client: $(CLIENT)
-	./$(CLIENT)
-
-terminal: terminal_test.cpp
-	$(CXX) $(CXXFLAGS) $< -o $@
-
-# Debug build
-debug: CXXFLAGS += -g -O0 -DDEBUG
-debug: clean all
-
-# Release build
-release: CXXFLAGS += -O2 -DNDEBUG
-release: clean all
-
-# Clean compiled files
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -f server client 
 
-# Rebuild everything
-rebuild: clean all
-
-.PHONY: all server client debug release clean rebuild
+.PHONY: all clean
