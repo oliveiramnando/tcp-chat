@@ -10,9 +10,13 @@
 #include <arpa/inet.h>
 
 #include <string>
-#include <thread>
+#include <cstring>
+#include <vector>
 
+#include <thread>
 #include <mutex>
+
+#include "net.hpp"
 
 #define BUFFER_SIZE 8192
 
@@ -95,10 +99,23 @@ void sendMsg(int clientSocket, const string& name)
                 cout << "\r\033[2K";
 
                 string message = name + " : " + inputBuffer;
+                if (message.size() > MAX_MESSAGE_SIZE)
+                {
+                    cerr << "Invalid Message Length" << endl;
+                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                    continue;
+                }
 
-                if (::send(clientSocket, message.c_str(), message.size(), 0) < 0)
+                uint32_t messageLength = htonl(static_cast<uint32_t>(message.size()));
+                vector<char> sendBuffer(sizeof(uint32_t) + message.size());
+
+                memcpy(sendBuffer.data(), &messageLength, sizeof(messageLength));
+                memcpy(sendBuffer.data() + sizeof(messageLength), message.c_str(), message.size());
+
+
+                if (!sendAll(clientSocket, sendBuffer.data(), sendBuffer.size()))
     	        {
-    	            perror("Failed to send message");
+    	            break;
     	        }
 
                 cout << "\033[92myou\033[0m : " << inputBuffer << flush;
