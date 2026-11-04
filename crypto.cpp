@@ -5,6 +5,8 @@
 #include <cerrno>
 #include <iostream>
 #include <string>
+#include <vector>
+#include <cstring>
 
 using namespace std;
 
@@ -54,3 +56,21 @@ bool loadKey(const string& filename, unsigned char* key)
     keyFile.close();
     return true;
 }
+
+
+bool encrypt(const string& message, vector<unsigned char>* encrypted, const unsigned char* key)
+{
+    unsigned char nonce[crypto_aead_xchacha20poly1305_ietf_NPUBBYTES];
+    randombytes_buf(nonce, sizeof(nonce));
+    memcpy(encrypted->data(), nonce, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+
+    if (crypto_aead_xchacha20poly1305_ietf_encrypt(encrypted->data() + crypto_aead_xchacha20poly1305_ietf_NPUBBYTES, nullptr, 
+                                                reinterpret_cast<const unsigned char*>(message.data()), message.size(), 
+                                                nullptr, 0, nullptr, nonce, key) != 0)
+    {
+        cerr << "Encryption failed" << endl;
+        return false;
+    }
+    return true;
+}
+
