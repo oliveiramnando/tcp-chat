@@ -2,22 +2,26 @@
 #include <iostream>
 #include <unistd.h>
 #include <cerrno>
-
-#include <termios.h>
+#include <cstdlib>
+#include <fstream>
+#include <vector>
+#include <cstring>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
 #include <string>
-#include <cstring>
-#include <vector>
-
 #include <thread>
 #include <mutex>
+#include <termios.h>
 #include <csignal>
+#include <filesystem>
+
+#include <sodium.h>
 
 #include "net.hpp"
+#include "crypto.hpp"
 
 using namespace std;
 
@@ -154,9 +158,29 @@ void sendMsg(int clientSocket, const string& name)
     }
 }
 
+
 int main()
 {
     signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE signal to prevent abrupt termination
+
+    string keyFile = "chat.key";
+    if (!filesystem::exists(keyFile))
+    {
+        bool generatedKey = keyGen();
+        if (!generatedKey)
+        {
+            cerr << "Failed to generate key" << endl;
+            exit(1);
+        }
+    }
+
+    unsigned char key[crypto_aead_xchacha20poly1305_ietf_KEYBYTES];
+    if (!loadKey(keyFile, key))
+    {
+        cerr << "Failed to load key from file: " << keyFile << endl;
+        return 1;
+    }
+
 
     // create client socket
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
