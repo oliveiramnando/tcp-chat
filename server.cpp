@@ -16,7 +16,7 @@
 
 #include "net.hpp"
 
-#define MAX_CLIENTS 5
+#define MAX_CLIENTS 2
 
 using namespace std;
 
@@ -63,8 +63,7 @@ void clientHandler(int clientSocket, vector<int>& clients)
 		memcpy(sendBuffer.data(), &messageLengthNetworkOrder, sizeof(messageLengthNetworkOrder));
 		memcpy(sendBuffer.data() + sizeof(messageLengthNetworkOrder), nameAndMessage.c_str(), nameAndMessage.size());
 
-		cout.write(nameAndMessage.data(), messageLength);	// writes specific number of bytes to standard output
-		cout << endl;
+		cout << "[Relayed " << messageLength << " bytes]" << endl; 
 
 		{
 			lock_guard<mutex> lock(clientsMutex);
