@@ -1,91 +1,143 @@
 # TCP Chat
 
-A lightweight, terminal-based chat application built in C++ using TCP sockets. It follows a client-server architecture and supports real-time messaging between multiple connected clients.
+A lightweight, terminal-based chat application written in **C++20**. It uses TCP sockets and multithreading to let multiple clients exchange messages through a central server, with **XChaCha20-Poly1305 authenticated encryption** provided by libsodium.
 
-This project is a hands-on exploration of socket programming, multithreading, TCP message framing, and terminal input handling.
+The project explores low-level networking, concurrent programming, message framing, and client-side encryption.
 
-Features
+## Features
 
-* Multi-client chat: The server accepts multiple connections and broadcasts messages to other connected clients.
-* Concurrent communication: Clients send and receive messages on separate threads.
-* TCP message framing: Each message uses a 4-byte length prefix so it can be read correctly over a byte-stream connection.
-* Reliable send/receive helpers: Shared networking functions handle partial socket reads and writes.
-* Terminal interface: Custom input handling and ANSI colors keep incoming messages and the typing prompt readable.
-* Connection handling: Clients can disconnect without stopping the server or other conversations.
+- **Multi-client messaging:** A TCP server broadcasts each message to other connected clients.
+- **Client-side encryption:** Messages are encrypted and authenticated with XChaCha20-Poly1305 before being sent. The server forwards encrypted data without decrypting it.
+- **Fresh nonce per message:** libsodium generates a random nonce for each encrypted message.
+- **Shared-key setup:** Clients create a local `chat.key` automatically if one is missing and load it on startup.
+- **Concurrent communication:** Separate send and receive threads keep the chat responsive.
+- **TCP message framing:** A 4-byte length prefix identifies each complete encrypted message.
+- **Terminal interface:** Colored messages, an editable input prompt, and terminal restoration on exit.
 
-Tech Stack
+## Tech Stack
 
-* Language: C++20
-* Networking: POSIX TCP sockets
-* Concurrency: std::thread and std::mutex
-* Terminal handling: termios and ANSI escape sequences
-* Build: GNU Make and g++
+- **Language:** C++20
+- **Networking:** POSIX TCP sockets
+- **Concurrency:** `std::thread`, `std::mutex`, `std::atomic`
+- **Cryptography:** libsodium (XChaCha20-Poly1305)
+- **Terminal handling:** `termios` and ANSI escape sequences
+- **Build:** GNU Make and `g++`
 
-Getting Started
+## Getting Started
 
-Prerequisites
+### Prerequisites
 
-* A Unix-like environment (Linux or macOS)
-* A C++20-compatible compiler (g++)
-* make
+- Linux or macOS (the current implementation uses POSIX APIs)
+- A C++20-compatible compiler and `make`
+- [libsodium](https://doc.libsodium.org/installation)
 
-Installation
+On **Ubuntu/Debian**:
 
-Clone the repository and compile the server and client:
+```bash
+sudo apt update
+sudo apt install build-essential libsodium-dev
+```
 
+On **macOS** with Homebrew:
+
+```bash
+brew install libsodium
+```
+
+### Build
+
+```bash
 git clone https://github.com/oliveiramnando/tcp-chat.git
 cd tcp-chat
 make
+```
 
-Running the Chat
+This builds two executables: `server` and `client`.
+
+If the macOS linker cannot find libsodium installed by Homebrew, try:
+
+```bash
+make CXXFLAGS="-std=c++20 -Wall -Wextra -g -I$(brew --prefix libsodium)/include" \
+     LDLIBS="-L$(brew --prefix libsodium)/lib -lsodium"
+```
+
+### Run
 
 Start the server in one terminal:
 
+```bash
 ./server
+```
 
-In a second terminal, start a client:
+Open another terminal in the same project directory and run:
 
+```bash
 ./client
+```
 
-Enter a chat name when prompted, then start typing messages. Open additional terminals and run ./client to connect more participants.
+Enter a chat name when prompted. Run `./client` in additional terminals to join the conversation. Type **`q()`** and press Enter to disconnect.
 
-Type q() and press Enter to exit a client.
+By default, the server listens on **port 8080** on all network interfaces; the client connects to **`127.0.0.1:8080`**. To connect from another computer, change the IP address in `client.cpp` to the server's reachable address and rebuild.
 
-By default, the client connects to 127.0.0.1:8080. The server listens on port 8080. To connect from another machine, update the server IP address in client.cpp and rebuild.
+## Encryption and Key Setup
 
-How It Works
+The client calls libsodium to generate a **256-bit symmetric key** and saves it as `chat.key` if the file does not already exist. The file is ignored by Git.
 
-1. The server opens a TCP socket and listens for incoming connections.
-2. Each accepted connection is handled by its own thread.
-3. Clients send messages in the format name : message, preceded by a 4-byte network-order length field.
-4. The server reads a complete message and forwards it to the other connected clients.
-5. Each client has a receiving thread that displays incoming messages while the sending thread handles terminal input.
+**Every client in a conversation must have a copy of the same `chat.key`.** When clients run from the same directory, they naturally load that file. When running from different directories or computers, securely copy the existing `chat.key` to each client's working directory *before starting the client*. Otherwise, clients generate different keys and cannot decrypt each other's messages.
 
-The current message payload limit is 8,192 bytes, including the sender name and separator.
+Keep `chat.key` private. Never commit it, post it publicly, or send it over an untrusted channel.
 
-Project Structure
+### Message Flow
 
+1. A client constructs a message in the form `name : message`.
+2. The client encrypts it with XChaCha20-Poly1305 using a fresh random nonce.
+3. The client sends a **4-byte network-order length prefix**, followed by the nonce, ciphertext, and authentication tag.
+4. The server validates the frame length and relays the encrypted payload to the other connected clients. It does **not** decrypt messages.
+5. Recipients use their copy of the shared key to verify, decrypt, and display each message.
+
+```text
+Client A                   Server                   Client B
+   |  encrypt                 |                         |
+   |--- encrypted message --->|                         |
+   |                          |--- encrypted message -->|
+   |                          |                    decrypt & display
+```
+
+The maximum **encrypted payload** is currently **8,192 bytes**. The nonce and authentication tag consume some of that limit, so the available plaintext message size is smaller.
+
+## Project Structure
+
+```text
 tcp-chat/
-├── client.cpp         # Client connection, terminal UI, send/receive threads
-├── server.cpp         # TCP server, client threads, message broadcasting
-├── net.cpp            # Socket read/write helper implementations
-├── net.hpp            # Networking declarations and message size limit
-├── terminal_test.cpp  # Terminal input experiments
-├── Makefile           # Build targets for client and server
-├── LICENSE            # MIT license
+├── client.cpp        # TCP client, chat input/output, send/receive threads
+├── server.cpp        # TCP server and encrypted-message broadcasting
+├── crypto.cpp        # Key generation/loading and authenticated encryption
+├── crypto.hpp        # Cryptography declarations
+├── net.cpp           # Helpers for complete socket reads and writes
+├── net.hpp           # Networking declarations and message size limit
+├── terminal_test.cpp # Terminal input experiments
+├── Makefile          # Build targets
+├── .gitignore        # Excludes chat.key and local files
+├── LICENSE           # MIT license
 └── README.md
+```
 
-Roadmap
+## Current Limitations
 
-* Add authenticated message encryption and a key-distribution mechanism.
-* Support private conversations or separate chat rooms.
-* Make server address and port configurable.
-* Improve client lifecycle handling and terminal UX.
+This is a learning project, **not a production-ready secure messenger**. In particular:
 
-Security Note
+- Clients must distribute and manage a **shared secret key manually**; there is no secure key exchange or per-user key management yet.
+- Anyone with the shared key can decrypt messages, and chat names are not authenticated as identities.
+- The protocol does not currently provide replay protection, private conversations, or separate chat rooms.
+- Server addresses and ports are hardcoded, and the terminal interface is designed for POSIX terminals.
 
-The version currently published on main sends messages in plaintext. It is a learning project and should not be used for sensitive communication over untrusted networks. Encryption is being developed separately and is not yet part of the published source.
+## Roadmap
 
-License
+- Secure key exchange and stronger participant identity management
+- Private conversations and separate chat rooms
+- Configurable host and port settings
+- Additional connection handling and terminal UI improvements
 
-Licensed under the MIT License.
+## License
+
+This project is licensed under the [MIT License](LICENSE).
