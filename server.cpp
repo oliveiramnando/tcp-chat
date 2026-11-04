@@ -2,6 +2,8 @@
 #include <iostream>
 #include <unistd.h>
 #include <cerrno>
+#include <cstring>
+#include <algorithm>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -9,54 +11,90 @@
 
 #include <vector>
 #include <thread>
+#include <mutex>
+#include <csignal>
+
+#include "net.hpp"
 
 #define MAX_CLIENTS 5
-#define BUFFER_SIZE 1024
 
 using namespace std;
 
+mutex clientsMutex;
+mutex coutMutex;
+
 void clientHandler(int clientSocket, vector<int>& clients)
 {
-    cout << "Accepted client connection" << endl;
+	{
+		lock_guard<mutex> lock(coutMutex);
+		cout << "Accepted client connection" << endl;
+	}
     
     while (true)
     {
-		char buffer[BUFFER_SIZE] = {};
-
-		ssize_t bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-		if (bytesReceived < 0)
+		char lengthBytes[4] = {};
+		if (!readNBytes(clientSocket, lengthBytes, sizeof(uint32_t)))
 		{
-			perror("Failed to recive data from client socket");
-		}
-
-		if (bytesReceived == 0)
-		{
-			cout << "Client disconnected!" << endl;
+			lock_guard<mutex> lock(coutMutex);
+			cout << "Failed to read message length!" << endl;
 			break;
 		}
 
-		cout.write(buffer, bytesReceived);	// writes specific number of bytes to standard output
+		uint32_t messageLength;
+        memcpy(&messageLength, lengthBytes, sizeof(messageLength));
+        messageLength = ntohl(messageLength); 
+
+        if (messageLength == 0 || messageLength > MAX_MESSAGE_SIZE)
+        {
+            cerr << "Invalid message length received from client" << endl;
+            break;
+        }
+    
+        string nameAndMessage(messageLength, '\0');
+        if (!readNBytes(clientSocket, nameAndMessage.data(), messageLength))
+        {
+            cerr << "Failed to read message from client" << endl;
+            break;
+        }
+
+		uint32_t messageLengthNetworkOrder = htonl(static_cast<uint32_t>(nameAndMessage.size()));
+		vector<char> sendBuffer(sizeof(messageLengthNetworkOrder) + nameAndMessage.size());
+
+		memcpy(sendBuffer.data(), &messageLengthNetworkOrder, sizeof(messageLengthNetworkOrder));
+		memcpy(sendBuffer.data() + sizeof(messageLengthNetworkOrder), nameAndMessage.c_str(), nameAndMessage.size());
+
+		cout.write(nameAndMessage.data(), messageLength);	// writes specific number of bytes to standard output
 		cout << endl;
 
-		for (int cli: clients)
 		{
-			if (cli == clientSocket)
+			lock_guard<mutex> lock(clientsMutex);
+			for (int cli: clients)
 			{
-				continue;
-			}
+				if (cli == clientSocket)
+				{
+					continue;
+				}
+
 			
-			ssize_t bytesSent = send(cli, buffer, static_cast<size_t>(bytesReceived), 0); 
-			if (bytesSent < 0)
-			{
-				perror("Could not send message to client");
+				if (!sendAll(cli, sendBuffer.data(), sendBuffer.size()))
+				{
+					cerr << "Failed to send message to client" << endl;
+				}
 			}
 		}
     }
-    close(clientSocket);
+
+	{
+		lock_guard<mutex> lock(clientsMutex);
+		erase(clients, clientSocket);
+	}
+	close(clientSocket);
+	cout << "Client disconnected" << endl;
 }
 
 int main()
 {
+	signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE signal to prevent abrupt termination
     // create server socket
     int serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (serverSocket < 0)
@@ -68,10 +106,16 @@ int main()
     cout << "Server socket created!" << endl;
 
     // define server address
-    sockaddr_in serverAddr;
+    sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(8080);
     serverAddr.sin_addr.s_addr = INADDR_ANY; 	// works only on server, where it means "listen on all my address"
+	int yes = 1;
+	if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0)
+	{
+		perror("Failed to set socket option");
+		return 1;
+	}
     
     // bind socket to address
     if (::bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0)
@@ -98,11 +142,14 @@ int main()
 		if (clientSocket < 0)
 		{
 			perror("Failed to accept client socket");
-			return 1;
+			continue;
 		}
 		
 		// add client to vector, let thread handle that client
-		clients.push_back(clientSocket);
+		{
+			lock_guard<mutex> lock(clientsMutex);
+			clients.push_back(clientSocket);
+		}
 		thread cli(clientHandler, clientSocket, ref(clients));
 
 		cli.detach();
@@ -115,8 +162,3 @@ int main()
 
     return 0;
 }
-
-
-
-
-
