@@ -14,6 +14,8 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include <atomic>
+
 #include <termios.h>
 #include <csignal>
 #include <filesystem>
@@ -28,6 +30,7 @@ using namespace std;
 string inputBuffer;
 mutex terminalMutex;
 termios origTerminal{};
+atomic<bool> quitting = false;
 
 
 void restoreTerminal()
@@ -44,31 +47,56 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 		char lengthBytes[4] = {};
 		if (!readNBytes(clientSocket, lengthBytes, sizeof(uint32_t)))
 		{
-			cerr << "Failed to read message length from server" << endl;
-			break;
+			if (quitting) { break; }
+            {
+                lock_guard<mutex> lock(terminalMutex);
+                cout << "\r\033[K";
+                cerr << "Server disconnected." << endl;
+            }
+            exit(0);
 		}
 
-		// convert buffer to string; parse length and message
+		// length of entire encryption [nonce + ciphertext + tag]
         uint32_t encryptedLength;
         memcpy(&encryptedLength, lengthBytes, sizeof(encryptedLength));
         encryptedLength = ntohl(encryptedLength); 
 
         if (encryptedLength == 0 || encryptedLength > MAX_MESSAGE_SIZE)
         {
-            cerr << "Invalid message length received from server" << endl;
-            break;
+            {
+                lock_guard<mutex> lock(terminalMutex);
+                cout << "\r\033[K";
+                cerr << "Invalid message length received from server" << endl;
+                cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+            }
+            exit(1);
         }
 
         // read rest of data using message length to ensure all bytes get processed
         string encryptedMessage(encryptedLength, '\0');
         if (!readNBytes(clientSocket, encryptedMessage.data(), encryptedLength))
         {
-            cerr << "Failed to read message from server" << endl;
-            break;
+            {
+                lock_guard<mutex> lock(terminalMutex);
+                cout << "\r\033[K";
+                cerr << "Failed to read message from server" << endl;
+                cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+            }
+            exit(1);;
         }
 
         // decrypt message here
-        auto decryptedMessage = decrypt(encryptedLength, encryptedMessage, key);
+        vector<unsigned char> decryptedMessage{};
+        if(!decrypt(decryptedMessage, encryptedMessage, key))
+        {
+            {
+                lock_guard<mutex> lock(terminalMutex);
+                cout << "\r\033[K";
+                cerr << "Failed to decrypt message." << endl;
+                cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+            }
+            continue;
+        }
         string nameAndMessage(decryptedMessage.begin(), decryptedMessage.end());
 
 		size_t colonIdx = nameAndMessage.find(" : ");
@@ -116,8 +144,8 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
 
                 string message = name + " : " + inputBuffer; 
 
-                vector<unsigned char> encrypted(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES + message.size() + crypto_aead_xchacha20poly1305_ietf_ABYTES);
-                if (!encrypt(message, &encrypted, key))
+                vector<unsigned char> encrypted{};
+                if (!encrypt(message, encrypted, key))
                 {
                     cerr << "Failed to encrypt" << endl;
                     cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
@@ -175,6 +203,12 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
 int main()
 {
     signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE signal to prevent abrupt termination
+
+    if (sodium_init() < 0)
+    {
+        cerr << "Failed to initialize libsodium" << endl;
+        return 1;
+    }
 
     string keyFile = "chat.key";
     if (!filesystem::exists(keyFile))
