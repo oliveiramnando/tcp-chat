@@ -5,14 +5,12 @@
 #include <vector>
 #include <cstdint>
 
-using namespace std;
-
 bool keyGen();
 
-bool loadKey(const string& filename, unsigned char* key);
+bool loadKey(const std::string& filename, unsigned char* key);
 
-bool encrypt(const string& message, vector<unsigned char>* encrypted, const unsigned char* key);
+bool encrypt(const std::string& message, std::vector<unsigned char>& encrypted, const unsigned char* key);
 
-vector<unsigned char> decrypt(uint32_t encryptedLength, const string& encryptedMessage, const unsigned char* key);
+bool decrypt(std::vector<unsigned char>& decryptedMessage, const std::string& encryptedMessage, const unsigned char* key);
 
 #endif
