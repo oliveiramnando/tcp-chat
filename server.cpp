@@ -63,6 +63,7 @@ void clientHandler(int clientSocket, vector<int>& clients)
 		memcpy(sendBuffer.data(), &messageLengthNetworkOrder, sizeof(messageLengthNetworkOrder));
 		memcpy(sendBuffer.data() + sizeof(messageLengthNetworkOrder), nameAndMessage.c_str(), nameAndMessage.size());
 
+		// print bytes relayted
 		cout << "[Relayed " << messageLength << " bytes]" << endl; 
 
 		{
@@ -87,6 +88,7 @@ void clientHandler(int clientSocket, vector<int>& clients)
 		lock_guard<mutex> lock(clientsMutex);
 		erase(clients, clientSocket);
 	}
+	// send peer left to remaing clients here
 	close(clientSocket);
 	cout << "Client disconnected" << endl;
 }
