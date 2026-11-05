@@ -6,7 +6,7 @@
 #include <algorithm>
 
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <netinet/in.h> 
 #include <arpa/inet.h>
 
 #include <vector>
@@ -29,7 +29,10 @@ void clientHandler(int clientSocket, vector<int>& clients)
 		lock_guard<mutex> lock(coutMutex);
 		cout << "Accepted client connection" << endl;
 	}
-    
+
+    // send join here
+
+
     while (true)
     {
 		MsgType type;
@@ -73,6 +76,16 @@ void clientHandler(int clientSocket, vector<int>& clients)
 		erase(clients, clientSocket);
 	}
 	// send peer left to remaing clients here
+    MsgType peerLeft = PEER_LEFT;
+    vector<unsigned char> body('\0');
+    for (int cli: clients)
+	{
+		if (!sendFrame(cli, peerLeft, body))
+		{
+			cerr << "Failed to send message to client" << endl;
+		}
+	}
+
 	close(clientSocket);
 	cout << "Client disconnected" << endl;
 }
@@ -112,7 +125,7 @@ int main()
     cout << "Socket bound to address" << endl;
 
     // listen for incoming connections
-    if (listen(serverSocket, MAX_CLIENTS) < 0)
+    if (listen(serverSocket, 2) < 0)
     {
 		perror("Failed to listen for incoming connections");
 		return 1;
@@ -131,12 +144,30 @@ int main()
 		}
 		
 		// add client to vector, let thread handle that client
-		{
+        if (clients.size() >= MAX_CLIENTS)
+        {
+            lock_guard<mutex> lock(coutMutex);
+
+            MsgType errorType = ERROR_MSG;
+            string errorMessage = "MAX CLIENTS HAVE BEEN REACHED.";
+
+            cerr << errorMessage << endl;
+
+            vector<unsigned char> errorMsg(errorMessage.begin(), errorMessage.end()); 
+            if (!sendFrame(clientSocket, errorType, errorMsg))
+            {
+                cerr << "Could not send frame to client" << endl;
+                break;
+            }
+            continue;
+        }
+
+        {
 			lock_guard<mutex> lock(clientsMutex);
 			clients.push_back(clientSocket);
 		}
-		thread cli(clientHandler, clientSocket, ref(clients));
 
+		thread cli(clientHandler, clientSocket, ref(clients));
 		cli.detach();
     }
 
@@ -147,3 +178,4 @@ int main()
 
     return 0;
 }
+
