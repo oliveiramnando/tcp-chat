@@ -45,7 +45,7 @@ bool sendAll(int clientSocket, const char* buffer, size_t n)
     return true;
 }
 
-bool receiveFrame(int clientSocket, MsgType& type, string& encryptedMessage)
+bool receiveFrame(int clientSocket, MsgType& type, string& body)
 {
     // read 4 bytes for length
     char lengthBytes[sizeof(uint32_t)] = {}; 
@@ -72,23 +72,23 @@ bool receiveFrame(int clientSocket, MsgType& type, string& encryptedMessage)
     // get and convert message type
     type = static_cast<MsgType>(static_cast<unsigned char>(receiveBuffer[0]));
     
-    encryptedMessage.assign(receiveBuffer.begin() + 1, receiveBuffer.end());
+    body.assign(receiveBuffer.begin() + 1, receiveBuffer.end());
     
     return true;
 }
 
-bool sendFrame(int clientSocket, MsgType type, const vector<unsigned char>& encrypted)
+bool sendFrame(int clientSocket, MsgType type, const vector<unsigned char>& body)
 {
     const uint8_t typeByte = static_cast<uint8_t>(type);
 
-    const uint32_t bodyLength = static_cast<uint32_t>(sizeof(typeByte) + encrypted.size());
+    const uint32_t bodyLength = static_cast<uint32_t>(sizeof(typeByte) + body.size());
     const uint32_t networkLength = htonl(bodyLength);
 
     vector<char> sendBuffer(sizeof(networkLength) + bodyLength);
     
     memcpy(sendBuffer.data(), &networkLength, sizeof(networkLength));
     memcpy(sendBuffer.data() + sizeof(networkLength), &typeByte, sizeof(typeByte));
-    memcpy(sendBuffer.data() + sizeof(networkLength) + sizeof(uint8_t), encrypted.data(), encrypted.size());
+    memcpy(sendBuffer.data() + sizeof(networkLength) + sizeof(uint8_t), body.data(), body.size());
 
     if (!sendAll(clientSocket, sendBuffer.data(), sendBuffer.size()))
     {
