@@ -64,7 +64,14 @@ void receiveMsg(int clientSocket, const unsigned char* key)
             case MsgType::HANDSHAKE:
                 break;
             case MsgType::PEER_JOINED:
-                break;
+                 // close socket and clean up 
+                {
+                    lock_guard<mutex> lock(terminalMutex);
+                    cout << "\n\r\033[k";
+                    cout << body << endl;
+                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                }
+                continue;
             case MsgType::PEER_LEFT:
                 // close socket and clean up 
                 {
@@ -73,6 +80,8 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                     cerr << "Peer Left." << endl;
                     cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
                 }
+                quitting = true;
+                shutdown(clientSocket, SHUT_RDWR);
                 return;
             case MsgType::ERROR_MSG:
                 {
@@ -129,6 +138,7 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
 
     while (read(STDIN_FILENO, &ch, 1) == 1)
     {
+        if (quitting) { break; }
         {
             lock_guard<mutex> lock(terminalMutex);
 
