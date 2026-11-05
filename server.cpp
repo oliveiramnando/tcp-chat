@@ -33,27 +33,22 @@ void clientHandler(int clientSocket, vector<int>& clients)
     while (true)
     {
 		MsgType type;
-        string encryptedMessage{};
-        if(!receiveFrame(clientSocket, type, encryptedMessage))
+        string encrypted{};
+        if(!receiveFrame(clientSocket, type, encrypted))
         {
-            if (quitting) { break; }
             {
-                lock_guard<mutex> lock(terminalMutex);
+                lock_guard<mutex> lock(coutMutex);
                 cout << "\r\033[K";
-                cerr << "Error receiving frame." << endl;
+                cerr << "Client disconnected or Error receiving frame." << endl;
             }
-            exit(0);
+            break;
         }
 
-
-		uint32_t messageLengthNetworkOrder = htonl(static_cast<uint32_t>(nameAndMessage.size()));
-		vector<char> sendBuffer(sizeof(messageLengthNetworkOrder) + nameAndMessage.size());
-
-		memcpy(sendBuffer.data(), &messageLengthNetworkOrder, sizeof(messageLengthNetworkOrder));
-		memcpy(sendBuffer.data() + sizeof(messageLengthNetworkOrder), nameAndMessage.c_str(), nameAndMessage.size());
+        //  convert encryptedMessage into uvector<Char>
+        const vector<unsigned char> encryptedMessage(encrypted.begin(), encrypted.end()); 
 
 		// print bytes relayted
-		cout << "[Relayed " << messageLength << " bytes]" << endl; 
+		cout << "[Relayed " << encryptedMessage.size() << " bytes]" << endl; 
 
 		{
 			lock_guard<mutex> lock(clientsMutex);
@@ -65,7 +60,7 @@ void clientHandler(int clientSocket, vector<int>& clients)
 				}
 
 			
-				if (!sendAll(cli, sendBuffer.data(), sendBuffer.size()))
+				if (!sendFrame(cli, type, encryptedMessage))
 				{
 					cerr << "Failed to send message to client" << endl;
 				}
