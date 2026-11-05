@@ -57,6 +57,24 @@ void receiveMsg(int clientSocket, const unsigned char* key)
         }
 
         // branch by type here
+        switch(type)
+        {
+            case MsgType::MESSAGE:
+                break;
+            case MsgType::HANDSHAKE:
+                break;
+            case MsgType::PEER_JOINED:
+                break;
+            case MsgType::PEER_LEFT:
+                // close socket and clean up 
+                {
+                    lock_guard<mutex> lock(terminalMutex);
+                    cout << "\n\r\033[k";
+                    cerr << "Peer Left." << endl;
+                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                }
+                return;
+        }
 
         // decrypt message here
         vector<unsigned char> decryptedMessage{};
@@ -114,6 +132,9 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                     cout << "\r\033[2K";
                     cout << "Exiting program..." << endl;
                     quitting = true;
+                    MsgType peerLeft = PEER_LEFT;
+                    vector<unsigned char> msg(1, '\0');
+                    sendFrame(clientSocket, peerLeft, msg);
                     shutdown(clientSocket, SHUT_RDWR);
                     break;
                 }
@@ -143,10 +164,8 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                     continue;
                 }              
 
-                MsgType type = MESSAGE;
-
-
-                if (!sendFrame(clientSocket, type, encrypted))
+                MsgType msg = MESSAGE;
+                if (!sendFrame(clientSocket, msg, encrypted))
                 {
                     cerr << "Failed to send frame" << endl;
                     cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
