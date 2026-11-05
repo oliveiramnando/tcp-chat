@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
-#include <algorithm>
 
 #include <sys/socket.h>
 #include <netinet/in.h> 
@@ -31,7 +30,6 @@ void clientHandler(int clientSocket, vector<int>& clients)
 	}
 
     // send join here
-
 
     while (true)
     {
@@ -166,6 +164,26 @@ int main()
 			lock_guard<mutex> lock(clientsMutex);
 			clients.push_back(clientSocket);
 		}
+
+        // if size of clients vector is > 0, notify all clients that peer joined
+        if (clients.size() >= 0)
+        {
+            lock_guard<mutex> lock(coutMutex);
+
+            MsgType peerJoined = PEER_JOINED;
+            string peerJoinedMsg = "PEER JOINED.";
+
+            cerr << peerJoinedMsg << endl;
+
+            vector<unsigned char> pjMsg(peerJoinedMsg.begin(), peerJoinedMsg.end()); 
+            for (int cli: clients)
+	        {
+	        	if (!sendFrame(cli, peerJoined, pjMsg))
+	        	{
+	        		cerr << "Failed to send message to client" << endl;
+	        	}
+	        }
+        }
 
 		thread cli(clientHandler, clientSocket, ref(clients));
 		cli.detach();
