@@ -2,4 +2,4 @@ build/
 .env
 
 chat.key
-.dSYM
+*.dSYM
