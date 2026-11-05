@@ -20,6 +20,6 @@ bool sendAll(int clientSocket, const char* buffer, size_t n);
 
 bool receiveFrame(int clientSocket, MsgType& type, std::string& encryptedMessage);
 
-bool sendFrame(int clientSocket, const std::vector<unsigned char>& encrypted);
+bool sendFrame(int clientSocket, MsgType type, const std::vector<unsigned char>& encrypted);
 
 #endif
