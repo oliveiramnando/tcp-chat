@@ -143,7 +143,10 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                     continue;
                 }              
 
-                if (!sendFrame(clientSocket, encrypted))
+                MsgType type = MESSAGE;
+
+
+                if (!sendFrame(clientSocket, type, encrypted))
                 {
                     cerr << "Failed to send frame" << endl;
                     cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
