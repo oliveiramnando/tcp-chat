@@ -44,8 +44,8 @@ void receiveMsg(int clientSocket, const unsigned char* key)
     while (true)
     {
         MsgType type;
-        string encryptedMessage{};
-        if(!receiveFrame(clientSocket, type, encryptedMessage))
+        string body{};
+        if(!receiveFrame(clientSocket, type, body))
         {
             if (quitting) { break; }
             {
@@ -74,11 +74,19 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                     cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
                 }
                 return;
+            case MsgType::ERROR_MSG:
+                {
+                    lock_guard<mutex> lock(terminalMutex);
+                    cout << "\n\r\033[k";
+                    cerr << body << endl;
+                }
+                //exit program and clean up here
+                return;
         }
 
         // decrypt message here
         vector<unsigned char> decryptedMessage{};
-        if(!decrypt(decryptedMessage, encryptedMessage, key))
+        if(!decrypt(decryptedMessage, body, key))
         {
             {
                 lock_guard<mutex> lock(terminalMutex);
