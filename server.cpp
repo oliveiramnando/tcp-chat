@@ -32,30 +32,19 @@ void clientHandler(int clientSocket, vector<int>& clients)
     
     while (true)
     {
-		char lengthBytes[4] = {};
-		if (!readNBytes(clientSocket, lengthBytes, sizeof(uint32_t)))
-		{
-			lock_guard<mutex> lock(coutMutex);
-			cout << "Failed to read message length!" << endl;
-			break;
-		}
-
-		uint32_t messageLength;
-        memcpy(&messageLength, lengthBytes, sizeof(messageLength));
-        messageLength = ntohl(messageLength); 
-
-        if (messageLength == 0 || messageLength > MAX_MESSAGE_SIZE)
+		MsgType type;
+        string encryptedMessage{};
+        if(!receiveFrame(clientSocket, type, encryptedMessage))
         {
-            cerr << "Invalid message length received from client" << endl;
-            break;
+            if (quitting) { break; }
+            {
+                lock_guard<mutex> lock(terminalMutex);
+                cout << "\r\033[K";
+                cerr << "Error receiving frame." << endl;
+            }
+            exit(0);
         }
-    
-        string nameAndMessage(messageLength, '\0');
-        if (!readNBytes(clientSocket, nameAndMessage.data(), messageLength))
-        {
-            cerr << "Failed to read message from client" << endl;
-            break;
-        }
+
 
 		uint32_t messageLengthNetworkOrder = htonl(static_cast<uint32_t>(nameAndMessage.size()));
 		vector<char> sendBuffer(sizeof(messageLengthNetworkOrder) + nameAndMessage.size());
