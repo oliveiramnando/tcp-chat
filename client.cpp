@@ -43,47 +43,20 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 {
     while (true)
     {
-        // Read prefix for message length
-		char lengthBytes[4] = {};
-		if (!readNBytes(clientSocket, lengthBytes, sizeof(uint32_t)))
-		{
-			if (quitting) { break; }
+        MsgType type;
+        string encryptedMessage{};
+        if(!receiveFrame(clientSocket, type, encryptedMessage))
+        {
+            if (quitting) { break; }
             {
                 lock_guard<mutex> lock(terminalMutex);
                 cout << "\r\033[K";
-                cerr << "Server disconnected." << endl;
+                cerr << "Error receiving frame." << endl;
             }
             exit(0);
-		}
-
-		// length of entire encryption [nonce + ciphertext + tag]
-        uint32_t encryptedLength;
-        memcpy(&encryptedLength, lengthBytes, sizeof(encryptedLength));
-        encryptedLength = ntohl(encryptedLength); 
-
-        if (encryptedLength == 0 || encryptedLength > MAX_MESSAGE_SIZE)
-        {
-            {
-                lock_guard<mutex> lock(terminalMutex);
-                cout << "\r\033[K";
-                cerr << "Invalid message length received from server" << endl;
-                cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
-            }
-            exit(1);
         }
 
-        // read rest of data using message length to ensure all bytes get processed
-        string encryptedMessage(encryptedLength, '\0');
-        if (!readNBytes(clientSocket, encryptedMessage.data(), encryptedLength))
-        {
-            {
-                lock_guard<mutex> lock(terminalMutex);
-                cout << "\r\033[K";
-                cerr << "Failed to read message from server" << endl;
-                cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
-            }
-            exit(1);;
-        }
+        // branch by type here
 
         // decrypt message here
         vector<unsigned char> decryptedMessage{};
@@ -170,23 +143,18 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                     continue;
                 }              
 
-                uint32_t encryptedLength = htonl(static_cast<uint32_t>(encrypted.size()));
+                if (!sendFrame(clientSocket, encrypted))
+                {
+                    cerr << "Failed to send frame" << endl;
+                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                    continue;
+                }
 
-                // send buffer = [4 bytes for length][nonce + ciphertext + tag]
-                vector<char> sendBuffer(sizeof(uint32_t) + encrypted.size());
-
-                memcpy(sendBuffer.data(), &encryptedLength, sizeof(encryptedLength));
-                memcpy(sendBuffer.data() + sizeof(encryptedLength), encrypted.data(), encrypted.size());
-
-
-                if (!sendAll(clientSocket, sendBuffer.data(), sendBuffer.size()))
-    	        {
-    	            break;
-    	        }
-
+                // print sent message
                 cout << "\033[92myou\033[0m : " << inputBuffer << flush;
                 inputBuffer.clear();
 
+                // redraw prompt
                 cout << "\n\033[92myou\033[0m > " << flush; 
                 continue;
             }
