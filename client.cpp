@@ -63,7 +63,12 @@ void receiveMsg(int clientSocket, const unsigned char* key)
             case MsgType::MESSAGE:
                 break;
             case MsgType::HANDSHAKE:
-                break;
+                {
+                    lock_guard<mutex> lock(terminalMutex);
+                    cout << "HANDSHAKE RECEIVED" << endl;
+                }
+                
+                continue;
             case MsgType::PEER_JOINED:
                 {
                     lock_guard<mutex> lock(terminalMutex);
@@ -94,6 +99,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 
                     cout << "\r\033[K";
                     cout << "PEER JOINED." << endl;
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                     peerConnected = true;
                 }
                 continue;
@@ -104,20 +110,20 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                     cerr << body << endl;
                     cout << "WAITING FOR PEER..." << endl;
                     peerConnected = false;
-                    cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 continue;
             case MsgType::ERROR_MSG:
                 {
                     lock_guard<mutex> lock(terminalMutex);
-                    cout << "\n\r\033[K";
+                    cout << "\r\033[K";
                     cerr << body << endl;
                 }
                 exit(1);
             default:
                 {
                     lock_guard<mutex> lock(terminalMutex);
-                    cout << "\n\r\033[K";
+                    cout << "\r\033[K";
                     cerr << "INVALID MESSAGE TYPE" << endl;
                 }
                 exit(1);
@@ -131,7 +137,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                 lock_guard<mutex> lock(terminalMutex);
                 cout << "\r\033[K";
                 cerr << "Failed to decrypt message." << endl;
-                cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
+                cout << "\033[92myou\033[0m > " << inputBuffer << flush;
             }
             continue;
         }
@@ -144,7 +150,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                 lock_guard<mutex> lock(terminalMutex);
                 cout << "\r\033[K";
                 cerr << "Client sender does not have a name" << endl;
-                cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
+                cout << "\033[92myou\033[0m > " << inputBuffer << flush;
             }
             continue;
         }
@@ -162,7 +168,12 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 
 void sendMsg(int clientSocket, const string& name, const unsigned char* key)
 {
-    cout << "\033[92myou\033[0m > " << flush;
+    {
+        lock_guard<mutex> lock(terminalMutex);
+        cout << "\r\033[K";
+        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+    }
+
     char ch;
 
     while (read(STDIN_FILENO, &ch, 1) == 1)
@@ -187,7 +198,6 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                 {
                     cout << "\r\033[K";
                     cout << "No one is here..." << endl;
-                    cout << "\r\033[K";
                     cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                     continue;
                 }
@@ -226,6 +236,7 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                 }
 
                 // print sent message
+                cout << "\r\033[K";
                 cout << "\033[92myou\033[0m : " << inputBuffer << flush;
                 inputBuffer.clear();
 
