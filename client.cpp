@@ -69,7 +69,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                     lock_guard<mutex> lock(terminalMutex);
                     cout << "\n\r\033[k";
                     cout << body << endl;
-                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                    cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 continue;
             case MsgType::PEER_LEFT:
@@ -77,8 +77,8 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                 {
                     lock_guard<mutex> lock(terminalMutex);
                     cout << "\n\r\033[k";
-                    cerr << "Peer Left." << endl;
-                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                    cerr << body << endl;
+                    cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 quitting = true;
                 shutdown(clientSocket, SHUT_RDWR);
@@ -101,7 +101,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                 lock_guard<mutex> lock(terminalMutex);
                 cout << "\r\033[K";
                 cerr << "Failed to decrypt message." << endl;
-                cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
             }
             continue;
         }
@@ -114,7 +114,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                 lock_guard<mutex> lock(terminalMutex);
                 cout << "\r\033[K";
                 cerr << "Client sender does not have a name" << endl;
-                cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
             }
             continue;
         }
@@ -151,8 +151,9 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                     cout << "Exiting program..." << endl;
                     quitting = true;
                     MsgType peerLeft = PEER_LEFT;
-                    vector<unsigned char> msg(1, '\0');
-                    sendFrame(clientSocket, peerLeft, msg);
+                    string peerleftMsg = "PEER LEFT.";
+                    vector<unsigned char> plMsg(peerleftMsg.begin(), peerleftMsg.end());
+                    sendFrame(clientSocket, peerLeft, plMsg);
                     shutdown(clientSocket, SHUT_RDWR);
                     break;
                 }
@@ -171,14 +172,14 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                 if (!encrypt(message, encrypted, key))
                 {
                     cerr << "Failed to encrypt" << endl;
-                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                    cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                     continue;
                 }
 
                 if (encrypted.size() > MAX_MESSAGE_SIZE)
                 {
                     cerr << "Invalid Message Length" << endl;
-                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                    cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                     continue;
                 }              
 
@@ -186,7 +187,7 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                 if (!sendFrame(clientSocket, msg, encrypted))
                 {
                     cerr << "Failed to send frame" << endl;
-                    cout << "\n\033[92myou\033[0m >> " << inputBuffer << flush;
+                    cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                     continue;
                 }
 

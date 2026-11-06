@@ -29,8 +29,6 @@ void clientHandler(int clientSocket, vector<int>& clients)
 		cout << "Accepted client connection" << endl;
 	}
 
-    // send join here
-
     while (true)
     {
 		MsgType type;
@@ -75,10 +73,11 @@ void clientHandler(int clientSocket, vector<int>& clients)
 	}
 	// send peer left to remaing clients here
     MsgType peerLeft = PEER_LEFT;
-    vector<unsigned char> body('\0');
+    string peerLeftMsg = "PEER LEFT.";
+    vector<unsigned char> plMsg(peerLeftMsg.begin(), peerLeftMsg.end());
     for (int cli: clients)
 	{
-		if (!sendFrame(cli, peerLeft, body))
+		if (!sendFrame(cli, peerLeft, plMsg))
 		{
 			cerr << "Failed to send message to client" << endl;
 		}
