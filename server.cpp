@@ -169,28 +169,34 @@ int main()
         {
 			lock_guard<mutex> lock(clientsMutex);
 			clients.push_back(clientSocket);
-		}
 
-        // if size of clients vector is 2, notify all clients that peer joined
-        {
-            lock_guard<mutex> lock(clientsMutex);
+            // if size of clients vector is 2, notify all clients that peer joined
             if (clients.size() == MAX_CLIENTS)
             {
                 lock_guard<mutex> lock(coutMutex);
 
                 MsgType peerJoined = MsgType::PEER_JOINED;
-                string peerJoinedMsg = "PEER JOINED.";
 
-                cerr << peerJoinedMsg << endl;
+                cerr << "PEER JOINED" << endl;
 
-                vector<unsigned char> pjMsg(peerJoinedMsg.begin(), peerJoinedMsg.end()); 
-                for (int cli: clients)
-	            {
-	            	if (!sendFrame(cli, peerJoined, pjMsg))
-	            	{
-	            		cerr << "Failed to send message to client" << endl;
-	            	}
-	            }
+                vector<unsigned char> initPayload{static_cast<unsigned char>(Role::INITIATOR)}; 
+                if (!sendFrame(clients[0], peerJoined, initPayload))
+                {
+                    cerr << "Failed to send message to client" << endl;
+                }
+
+                vector<unsigned char> resPayload{static_cast<unsigned char>(Role::RESPONDER)}; 
+                if (!sendFrame(clients[1], peerJoined, resPayload))
+                {
+                    cerr << "Failed to send message to client" << endl;
+                }
+                // for (int cli: clients)
+	            // {
+	            // 	if (!sendFrame(cli, peerJoined, payLoad))
+	            // 	{
+	            // 		cerr << "Failed to send message to client" << endl;
+	            // 	}
+	            // }
             }
             else 
             {
