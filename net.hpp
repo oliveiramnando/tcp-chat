@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <cstdint>
 
 #define MAX_MESSAGE_SIZE 8192
 
