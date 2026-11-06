@@ -41,6 +41,7 @@ void restoreTerminal()
 
 void receiveMsg(int clientSocket, const unsigned char* key)
 {
+    Role role;
     while (true)
     {
         MsgType type;
@@ -64,17 +65,39 @@ void receiveMsg(int clientSocket, const unsigned char* key)
             case MsgType::HANDSHAKE:
                 break;
             case MsgType::PEER_JOINED:
-                 // close socket and clean up 
                 {
                     lock_guard<mutex> lock(terminalMutex);
+
+                    if (body.size() != sizeof(uint8_t))
+                    {
+                        cout << "\r\033[K";
+                        cerr << "Invalid payload on PEER_JOIN from server." << endl;
+                        exit(1);
+                    }
+
+                    uint8_t roleByte = static_cast<uint8_t>(body[0]);
+
+                    if (roleByte == static_cast<uint8_t>(Role::INITIATOR))
+                    {
+                        role = Role::INITIATOR;
+                    }
+                    else if (roleByte == static_cast<uint8_t>(Role::RESPONDER)) 
+                    {
+                        role = Role::RESPONDER;
+                    }
+                    else 
+                    {
+                        cout << "\r\033[K";
+                        cout << "Invalid role on PEER_JOIN from server." << endl;
+                        exit(1);
+                    }
+
                     cout << "\r\033[K";
                     cout << "PEER JOINED." << endl;
-                    // cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                     peerConnected = true;
                 }
                 continue;
             case MsgType::PEER_LEFT:
-                // close socket and clean up 
                 {
                     lock_guard<mutex> lock(terminalMutex);
                     cout << "\r\033[K";
@@ -90,7 +113,13 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                     cout << "\n\r\033[K";
                     cerr << body << endl;
                 }
-                //exit program and clean up here
+                exit(1);
+            default:
+                {
+                    lock_guard<mutex> lock(terminalMutex);
+                    cout << "\n\r\033[K";
+                    cerr << "INVALID MESSAGE TYPE" << endl;
+                }
                 exit(1);
         }
 
