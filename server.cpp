@@ -160,7 +160,6 @@ int main()
                 if (!sendFrame(clientSocket, errorType, errorMsg))
                 {
                     cerr << "Could not send frame to client" << endl;
-                    break;
                 }
                 close(clientSocket);
                 continue;
