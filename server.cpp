@@ -43,6 +43,11 @@ void clientHandler(int clientSocket, vector<int>& clients)
             break;
         }
 
+        if (type == MsgType::PEER_JOINED || type ==  MsgType::PEER_LEFT)
+        {
+            break;
+        }
+
         //  convert encryptedMessage into uvector<Char>
         const vector<unsigned char> encryptedMessage(encrypted.begin(), encrypted.end()); 
 
@@ -71,8 +76,8 @@ void clientHandler(int clientSocket, vector<int>& clients)
 		lock_guard<mutex> lock(clientsMutex);
 		erase(clients, clientSocket);
 	}
-	// send peer left to remaing clients here
-    MsgType peerLeft = PEER_LEFT;
+    // send peer left to remaing clients here
+    MsgType peerLeft = MsgType::PEER_LEFT;
     string peerLeftMsg = "PEER LEFT.";
     vector<unsigned char> plMsg(peerLeftMsg.begin(), peerLeftMsg.end());
     for (int cli: clients)
@@ -82,7 +87,6 @@ void clientHandler(int clientSocket, vector<int>& clients)
 			cerr << "Failed to send message to client" << endl;
 		}
 	}
-
 	close(clientSocket);
 	cout << "Client disconnected" << endl;
 }
@@ -141,22 +145,26 @@ int main()
 		}
 		
 		// add client to vector, let thread handle that client
-        if (clients.size() >= MAX_CLIENTS)
         {
-            lock_guard<mutex> lock(coutMutex);
-
-            MsgType errorType = ERROR_MSG;
-            string errorMessage = "MAX CLIENTS HAVE BEEN REACHED.";
-
-            cerr << errorMessage << endl;
-
-            vector<unsigned char> errorMsg(errorMessage.begin(), errorMessage.end()); 
-            if (!sendFrame(clientSocket, errorType, errorMsg))
+            lock_guard<mutex> lock(clientsMutex);
+            if (clients.size() >= MAX_CLIENTS)
             {
-                cerr << "Could not send frame to client" << endl;
-                break;
+                lock_guard<mutex> lock(coutMutex);
+
+                MsgType errorType = MsgType::ERROR_MSG;
+                string errorMessage = "MAX CLIENTS HAVE BEEN REACHED.";
+
+                cerr << errorMessage << endl;
+
+                vector<unsigned char> errorMsg(errorMessage.begin(), errorMessage.end()); 
+                if (!sendFrame(clientSocket, errorType, errorMsg))
+                {
+                    cerr << "Could not send frame to client" << endl;
+                    break;
+                }
+                close(clientSocket);
+                continue;
             }
-            continue;
         }
 
         {
@@ -164,24 +172,32 @@ int main()
 			clients.push_back(clientSocket);
 		}
 
-        // if size of clients vector is > 0, notify all clients that peer joined
-        if (clients.size() >= 0)
+        // if size of clients vector is 2, notify all clients that peer joined
         {
-            lock_guard<mutex> lock(coutMutex);
+            lock_guard<mutex> lock(clientsMutex);
+            if (clients.size() == MAX_CLIENTS)
+            {
+                lock_guard<mutex> lock(coutMutex);
 
-            MsgType peerJoined = PEER_JOINED;
-            string peerJoinedMsg = "PEER JOINED.";
+                MsgType peerJoined = MsgType::PEER_JOINED;
+                string peerJoinedMsg = "PEER JOINED.";
 
-            cerr << peerJoinedMsg << endl;
+                cerr << peerJoinedMsg << endl;
 
-            vector<unsigned char> pjMsg(peerJoinedMsg.begin(), peerJoinedMsg.end()); 
-            for (int cli: clients)
-	        {
-	        	if (!sendFrame(cli, peerJoined, pjMsg))
-	        	{
-	        		cerr << "Failed to send message to client" << endl;
-	        	}
-	        }
+                vector<unsigned char> pjMsg(peerJoinedMsg.begin(), peerJoinedMsg.end()); 
+                for (int cli: clients)
+	            {
+	            	if (!sendFrame(cli, peerJoined, pjMsg))
+	            	{
+	            		cerr << "Failed to send message to client" << endl;
+	            	}
+	            }
+            }
+            else 
+            {
+                lock_guard<mutex> lock(coutMutex);
+                cout << "Waiting for peer..." << endl;
+            }
         }
 
 		thread cli(clientHandler, clientSocket, ref(clients));
