@@ -65,9 +65,10 @@ void receiveMsg(int clientSocket, const unsigned char* key)
             case MsgType::HANDSHAKE:
                 {
                     lock_guard<mutex> lock(terminalMutex);
+                    cout << "\r\033[K";
                     cout << "HANDSHAKE RECEIVED" << endl;
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                 }
-                
                 continue;
             case MsgType::PEER_JOINED:
                 {
@@ -204,7 +205,6 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
 
                 if (inputBuffer.empty())
                 {
-                    cout << "\033[92myou\033[0m > " << flush;
                     continue; 
                 }
 
