@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstdlib>
-#include <fstream>
 #include <vector>
 #include <cstring>
 
@@ -31,6 +30,7 @@ string inputBuffer;
 mutex terminalMutex;
 termios origTerminal{};
 atomic<bool> quitting = false;
+atomic<bool> peerConnected = false;
 
 
 void restoreTerminal()
@@ -67,17 +67,20 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                  // close socket and clean up 
                 {
                     lock_guard<mutex> lock(terminalMutex);
-                    cout << "\n\r\033[K";
-                    cout << body << endl;
-                    cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
+                    cout << "\r\033[K";
+                    cout << "PEER JOINED." << endl;
+                    // cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
+                    peerConnected = true;
                 }
                 continue;
             case MsgType::PEER_LEFT:
                 // close socket and clean up 
                 {
                     lock_guard<mutex> lock(terminalMutex);
-                    cout << "\n\r\033[K";
+                    cout << "\r\033[K";
                     cerr << body << endl;
+                    cout << "WAITING FOR PEER..." << endl;
+                    peerConnected = false;
                     cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 continue;
@@ -130,8 +133,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 
 void sendMsg(int clientSocket, const string& name, const unsigned char* key)
 {
-
-	cout << "\033[92myou\033[0m > " << flush;
+    cout << "\033[92myou\033[0m > " << flush;
     char ch;
 
     while (read(STDIN_FILENO, &ch, 1) == 1)
@@ -152,10 +154,19 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                     break;
                 }
 
+                if (!peerConnected)
+                {
+                    cout << "\r\033[K";
+                    cout << "No one is here..." << endl;
+                    cout << "\r\033[K";
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                    continue;
+                }
+
                 if (inputBuffer.empty())
                 {
                     cout << "\033[92myou\033[0m > " << flush;
-                    continue;
+                    continue; 
                 }
 
                 cout << "\r\033[2K";
@@ -279,6 +290,8 @@ int main()
 
     cout << endl;
 
+    cout << "WAITING FOR PEER.." << endl;
+
     // set terminal to raw mode
     tcgetattr(STDIN_FILENO, &origTerminal);
     atexit(restoreTerminal);
@@ -289,12 +302,12 @@ int main()
     tcsetattr(STDIN_FILENO, TCSANOW, &modTerminal);
 
     // threads
-    thread threadSend(sendMsg, clientSocket, name, key);
     thread threadReceive(receiveMsg, clientSocket, key);
+    thread threadSend(sendMsg, clientSocket, name, key);
 
-    threadSend.join();
     threadReceive.join();
-    
+    threadSend.join();
+
     // restore terminal settings
     restoreTerminal();
     cout << "\nTerminal settings restored" << endl;
