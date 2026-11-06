@@ -10,6 +10,44 @@
 
 using namespace std;
 
+void makeKeyPair(Session &s)
+{
+    crypto_kx_keypair(s.pk, s.sk);
+    s.hasKeyPair = true;
+    s.ready = false;
+}
+
+bool deriveSessionKeys(Session &s, bool isInitiator, const string &peerPk)
+{
+    unsigned char pk[crypto_kx_PUBLICKEYBYTES];
+    memcpy(&pk, peerPk.data(), peerPk.size());
+    if (isInitiator)
+    {
+        if (crypto_kx_server_session_keys(s.rx, s.tx, 
+                                          s.pk, s.sk, pk) != 0)
+        {
+            return false;
+        }
+    } else
+    {
+        if (crypto_kx_client_session_keys(s.rx, s.tx,
+                                          s.pk, s.sk, pk) != 0)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void wipeSession(Session &s)
+{
+    sodium_memzero(s.pk , crypto_kx_PUBLICKEYBYTES);
+    sodium_memzero(s.sk , crypto_kx_SECRETKEYBYTES);
+    sodium_memzero(s.rx , crypto_kx_SESSIONKEYBYTES);
+    sodium_memzero(s.tx , crypto_kx_SESSIONKEYBYTES);
+}
+
 bool keyGen()
 {
     unsigned char key[crypto_aead_xchacha20poly1305_ietf_KEYBYTES];
