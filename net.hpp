@@ -15,6 +15,11 @@ enum class MsgType : uint8_t {
     ERROR_MSG=5,
 };
 
+enum class Role : uint8_t {
+    RESPONDER=0,
+    INITIATOR=1,
+};
+
 bool readNBytes(int clientSocket, char* buffer, size_t n);
 
 bool sendAll(int clientSocket, const char* buffer, size_t n);
