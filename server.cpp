@@ -43,7 +43,7 @@ void clientHandler(int clientSocket, vector<int>& clients)
             break;
         }
 
-        if (type == MsgType::PEER_JOINED || type ==  MsgType::PEER_LEFT)
+        if ((type != MsgType::MESSAGE) && (type !=  MsgType::HANDSHAKE))
         {
             break;
         }
@@ -75,18 +75,20 @@ void clientHandler(int clientSocket, vector<int>& clients)
 	{
 		lock_guard<mutex> lock(clientsMutex);
 		erase(clients, clientSocket);
+
+        // send peer left to remaining clients
+        MsgType peerLeft = MsgType::PEER_LEFT;
+        string peerLeftMsg = "PEER LEFT.";
+        vector<unsigned char> plMsg(peerLeftMsg.begin(), peerLeftMsg.end());
+        for (int cli: clients)
+	    {
+	    	if (!sendFrame(cli, peerLeft, plMsg))
+	    	{
+	    		cerr << "Failed to send message to client" << endl;
+	    	}
+	    }
 	}
-    // send peer left to remaing clients here
-    MsgType peerLeft = MsgType::PEER_LEFT;
-    string peerLeftMsg = "PEER LEFT.";
-    vector<unsigned char> plMsg(peerLeftMsg.begin(), peerLeftMsg.end());
-    for (int cli: clients)
-	{
-		if (!sendFrame(cli, peerLeft, plMsg))
-		{
-			cerr << "Failed to send message to client" << endl;
-		}
-	}
+
 	close(clientSocket);
 	cout << "Client disconnected" << endl;
 }
