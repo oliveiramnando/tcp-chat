@@ -59,6 +59,10 @@ bool receiveFrame(int clientSocket, MsgType& type, string& body)
     memcpy(&networkLength, lengthBytes, sizeof(networkLength));
 
     uint32_t frameLength = ntohl(networkLength);
+    if (frameLength < 1 || frameLength > MAX_MESSAGE_SIZE)
+    {
+        return false;
+    }
 
     // build recveive buffer
     vector<char> receiveBuffer(static_cast<size_t>(frameLength));
