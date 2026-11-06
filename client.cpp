@@ -39,7 +39,7 @@ void restoreTerminal()
 }
 
 
-void receiveMsg(int clientSocket, const unsigned char* key)
+void receiveMsg(int clientSocket, Session& session)
 {
     Role role;
     while (true)
@@ -67,6 +67,18 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                     lock_guard<mutex> lock(terminalMutex);
                     cout << "\r\033[K";
                     cout << "HANDSHAKE RECEIVED" << endl;
+
+                    if (!deriveSessionKeys(ref(session), role == Role::INITIATOR, body))
+                    {
+                        cout << "\r\033[K";
+                        cerr << "Failed to derive session keys." << endl;
+                        exit(1);
+                    }
+
+                    cout << "Secure connection established." << endl;
+
+                    session.ready = true;
+
                     cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 continue;
@@ -100,8 +112,23 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 
                     cout << "\r\033[K";
                     cout << "PEER JOINED." << endl;
-                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                
                     peerConnected = true;
+
+                    cout << "Establishing secure connection..." << endl;
+
+                    // start the handshake
+                    wipeSession(session);
+                    makeKeyPair(ref(session));
+                    
+                    MsgType handshake = MsgType::HANDSHAKE;
+                    vector<unsigned char> publicKey(session.pk, session.pk + crypto_kx_PUBLICKEYBYTES);
+                    if(!sendFrame(clientSocket, handshake, publicKey))
+                    {
+                        cerr << "Failed to send frame." << endl;
+                    }
+
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 continue;
             case MsgType::PEER_LEFT:
@@ -111,6 +138,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                     cerr << body << endl;
                     cout << "WAITING FOR PEER..." << endl;
                     peerConnected = false;
+                    wipeSession(session);
                     cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 continue;
@@ -132,7 +160,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
 
         // decrypt message here
         vector<unsigned char> decryptedMessage{};
-        if(!decrypt(decryptedMessage, body, key))
+        if(!decrypt(decryptedMessage, body, session.rx))
         {
             {
                 lock_guard<mutex> lock(terminalMutex);
@@ -167,7 +195,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
     }
 }
 
-void sendMsg(int clientSocket, const string& name, const unsigned char* key)
+void sendMsg(int clientSocket, const string& name, Session& session)
 {
     {
         lock_guard<mutex> lock(terminalMutex);
@@ -213,7 +241,7 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                 string message = name + " : " + inputBuffer; 
 
                 vector<unsigned char> encrypted{};
-                if (!encrypt(message, encrypted, key))
+                if (!encrypt(message, encrypted, session.tx))
                 {
                     cerr << "Failed to encrypt" << endl;
                     cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
@@ -341,9 +369,12 @@ int main()
 
     tcsetattr(STDIN_FILENO, TCSANOW, &modTerminal);
 
+    // create session
+    Session session;
+
     // threads
-    thread threadReceive(receiveMsg, clientSocket, key);
-    thread threadSend(sendMsg, clientSocket, name, key);
+    thread threadReceive(receiveMsg, clientSocket, ref(session));
+    thread threadSend(sendMsg, clientSocket, name, ref(session));
 
     threadReceive.join();
     threadSend.join();
