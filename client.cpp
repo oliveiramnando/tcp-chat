@@ -150,10 +150,6 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                     cout << "\r\033[2K";
                     cout << "Exiting program..." << endl;
                     quitting = true;
-                    MsgType peerLeft = PEER_LEFT;
-                    string peerleftMsg = "PEER LEFT.";
-                    vector<unsigned char> plMsg(peerleftMsg.begin(), peerleftMsg.end());
-                    sendFrame(clientSocket, peerLeft, plMsg);
                     shutdown(clientSocket, SHUT_RDWR);
                     break;
                 }
@@ -183,7 +179,7 @@ void sendMsg(int clientSocket, const string& name, const unsigned char* key)
                     continue;
                 }              
 
-                MsgType msg = MESSAGE;
+                MsgType msg = MsgType::MESSAGE;
                 if (!sendFrame(clientSocket, msg, encrypted))
                 {
                     cerr << "Failed to send frame" << endl;
