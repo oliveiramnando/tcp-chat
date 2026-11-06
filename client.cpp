@@ -67,7 +67,7 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                  // close socket and clean up 
                 {
                     lock_guard<mutex> lock(terminalMutex);
-                    cout << "\n\r\033[k";
+                    cout << "\n\r\033[K";
                     cout << body << endl;
                     cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                 }
@@ -76,21 +76,19 @@ void receiveMsg(int clientSocket, const unsigned char* key)
                 // close socket and clean up 
                 {
                     lock_guard<mutex> lock(terminalMutex);
-                    cout << "\n\r\033[k";
+                    cout << "\n\r\033[K";
                     cerr << body << endl;
                     cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                 }
-                quitting = true;
-                shutdown(clientSocket, SHUT_RDWR);
-                return;
+                continue;
             case MsgType::ERROR_MSG:
                 {
                     lock_guard<mutex> lock(terminalMutex);
-                    cout << "\n\r\033[k";
+                    cout << "\n\r\033[K";
                     cerr << body << endl;
                 }
                 //exit program and clean up here
-                return;
+                exit(1);
         }
 
         // decrypt message here
