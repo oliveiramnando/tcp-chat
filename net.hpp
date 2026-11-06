@@ -7,7 +7,7 @@
 
 #define MAX_MESSAGE_SIZE 8192
 
-enum MsgType {
+enum class MsgType : uint8_t {
     MESSAGE=1,
     HANDSHAKE=2,
     PEER_JOINED=3,
