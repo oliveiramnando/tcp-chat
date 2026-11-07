@@ -214,6 +214,14 @@ void sendMsg(int clientSocket, const string& name, Session& session)
             // enter or ctrl+c
             if (ch == '\n' || ch == '\r' || ch == 3)
             {
+                if (!session.ready)
+                {
+                    cout << "\r\033[2K";
+                    cerr << "Connection not secured." << endl;
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                    continue;
+                }
+
                 if (inputBuffer == "q()" || ch == 3)
                 {
                     cout << "\r\033[2K";
@@ -301,25 +309,6 @@ int main()
     if (sodium_init() < 0)
     {
         cerr << "Failed to initialize libsodium" << endl;
-        return 1;
-    }
-
-    // generate and load key
-    string keyFile = "chat.key";
-    if (!filesystem::exists(keyFile))
-    {
-        bool generatedKey = keyGen();
-        if (!generatedKey)
-        {
-            cerr << "Failed to generate key" << endl;
-            exit(1);
-        }
-    }
-
-    unsigned char key[crypto_aead_xchacha20poly1305_ietf_KEYBYTES];
-    if (!loadKey(keyFile, key))
-    {
-        cerr << "Failed to load key from file: " << keyFile << endl;
         return 1;
     }
 
