@@ -19,8 +19,12 @@ void makeKeyPair(Session &s)
 
 bool deriveSessionKeys(Session &s, bool isInitiator, const string &peerPk)
 {
+    if (!s.hasKeyPair || peerPk.size() != crypto_kx_PUBLICKEYBYTES)
+    {
+        return false;
+    }
     unsigned char pk[crypto_kx_PUBLICKEYBYTES];
-    memcpy(&pk, peerPk.data(), peerPk.size());
+    memcpy(&pk, peerPk.data(), crypto_kx_PUBLICKEYBYTES);
     if (isInitiator)
     {
         if (crypto_kx_server_session_keys(s.rx, s.tx, 
@@ -46,6 +50,8 @@ void wipeSession(Session &s)
     sodium_memzero(s.sk , crypto_kx_SECRETKEYBYTES);
     sodium_memzero(s.rx , crypto_kx_SESSIONKEYBYTES);
     sodium_memzero(s.tx , crypto_kx_SESSIONKEYBYTES);
+    s.hasKeyPair = false;
+    s.ready = false;
 }
 
 bool encrypt(const string& message, vector<unsigned char>& encrypted, const unsigned char* key)
