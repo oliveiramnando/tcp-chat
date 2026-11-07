@@ -17,7 +17,6 @@
 
 #include <termios.h>
 #include <csignal>
-#include <filesystem>
 
 #include <sodium.h>
 
@@ -214,14 +213,6 @@ void sendMsg(int clientSocket, const string& name, Session& session)
             // enter or ctrl+c
             if (ch == '\n' || ch == '\r' || ch == 3)
             {
-                if (!session.ready)
-                {
-                    cout << "\r\033[2K";
-                    cerr << "Connection not secured." << endl;
-                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-                    continue;
-                }
-
                 if (inputBuffer == "q()" || ch == 3)
                 {
                     cout << "\r\033[2K";
@@ -235,6 +226,14 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                 {
                     cout << "\r\033[K";
                     cout << "No one is here..." << endl;
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                    continue;
+                }
+
+                if (!session.ready)
+                {
+                    cout << "\r\033[2K";
+                    cerr << "Connection not secured." << endl;
                     cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                     continue;
                 }
