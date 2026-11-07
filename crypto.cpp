@@ -41,6 +41,8 @@ bool deriveSessionKeys(Session &s, bool isInitiator, const string &peerPk)
         }
     }
 
+    sodium_memzero(s.sk, crypto_kx_SECRETKEYBYTES);     // sk no longer used so wipe it
+
     return true;
 }
 
