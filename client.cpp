@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <vector>
 #include <cstring>
+#include <cstdint>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -69,6 +70,7 @@ void receiveMsg(int clientSocket, Session& session)
                     if (session.ready)
                     {
                         cerr << "Session is already ready." << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                         continue;
                     }
 
@@ -168,6 +170,7 @@ void receiveMsg(int clientSocket, Session& session)
 
         if (!session.ready)
         {
+            lock_guard<mutex> lock(terminalMutex);
             cout << "\r\033[2K";
             cerr << "Connection not secured." << endl;
             cout << "\033[92myou\033[0m > " << inputBuffer << flush;
