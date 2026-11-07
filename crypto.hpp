@@ -22,10 +22,6 @@ bool deriveSessionKeys(Session& s, bool isInititor, const std::string& peerPk);
 
 void wipeSession(Session& s);
 
-bool keyGen();
-
-bool loadKey(const std::string& filename, unsigned char* key);
-
 bool encrypt(const std::string& message, std::vector<unsigned char>& encrypted, const unsigned char* key);
 
 bool decrypt(std::vector<unsigned char>& decryptedMessage, const std::string& encryptedMessage, const unsigned char* key);
