@@ -40,7 +40,7 @@ void restoreTerminal()
 
 void receiveMsg(int clientSocket, Session& session)
 {
-    Role role;
+    optional<Role> role;
     while (true)
     {
         MsgType type;
@@ -64,14 +64,23 @@ void receiveMsg(int clientSocket, Session& session)
             case MsgType::HANDSHAKE:
                 {
                     lock_guard<mutex> lock(terminalMutex);
+
                     cout << "\r\033[K";
+                    if (session.ready)
+                    {
+                        cerr << "Session is already ready." << endl;
+                        continue;
+                    }
+
                     cout << "HANDSHAKE RECEIVED" << endl;
 
-                    if (!deriveSessionKeys(ref(session), role == Role::INITIATOR, body))
+                    if (!deriveSessionKeys(session, role == Role::INITIATOR, body))
                     {
                         cout << "\r\033[K";
                         cerr << "Failed to derive session keys." << endl;
-                        exit(1);
+                        cerr << "HANDSHAKE rejected." << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                        continue;
                     }
 
                     cout << "Secure connection established." << endl;
@@ -118,7 +127,7 @@ void receiveMsg(int clientSocket, Session& session)
 
                     // start the handshake
                     wipeSession(session);
-                    makeKeyPair(ref(session));
+                    makeKeyPair(session);
                     
                     MsgType handshake = MsgType::HANDSHAKE;
                     vector<unsigned char> publicKey(session.pk, session.pk + crypto_kx_PUBLICKEYBYTES);
@@ -155,6 +164,14 @@ void receiveMsg(int clientSocket, Session& session)
                     cerr << "INVALID MESSAGE TYPE" << endl;
                 }
                 exit(1);
+        }
+
+        if (!session.ready)
+        {
+            cout << "\r\033[2K";
+            cerr << "Connection not secured." << endl;
+            cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+            continue;
         }
 
         // decrypt message here
