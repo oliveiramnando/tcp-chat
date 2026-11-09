@@ -10,6 +10,15 @@
 
 using namespace std;
 
+vector<unsigned char> buildLoginMessage(const array<unsigned char, CHALLENGE_BYTES>& challenge)
+{
+    const size_t labelLen = sizeof(LOGIN_LABEL) - 1;
+
+    vector<unsigned char> message(LOGIN_LABEL, LOGIN_LABEL + labelLen);
+    message.insert(message.end(), challenge.begin(), challenge.end());
+    return message;
+}
+
 bool readNBytes(int clientSocket, char* buffer, size_t n)
 {   
     size_t bytesRead = 0;
@@ -54,7 +63,6 @@ bool parseBody(const string& body, PeerId& id, vector<unsigned char>& payload)
     }
 
     memcpy(id.data(), body.data(), id.size());
-
     payload.assign(body.begin() + id.size(), body.end());
 
     return true;
