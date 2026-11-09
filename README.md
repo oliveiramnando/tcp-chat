@@ -1,20 +1,22 @@
 # TCP Chat
 
-A terminal-based, encrypted TCP chat application written in **C++20**. Two clients communicate through a multithreaded relay server using a custom framed protocol and **XChaCha20-Poly1305** authenticated encryption via [libsodium](https://doc.libsodium.org/).
+A terminal-based, end-to-end encrypted TCP chat application written in **C++20**. Two clients communicate through a multithreaded relay server using a custom framed protocol, an ephemeral **X25519** key exchange, and **XChaCha20-Poly1305** authenticated encryption via [libsodium](https://doc.libsodium.org/).
 
-The server forwards encrypted messages without decrypting them. Clients establish directional session keys by exchanging public keys through the relay, so a shared key file is no longer required.
+The server only relays frames: it never holds the session keys and cannot read chat content. Each new conversation uses fresh keys, and both clients display a **session fingerprint** that users can compare out of band to detect a man-in-the-middle.
 
-> **Project status:** Work in progress and intended for learning systems programming. Key exchange is **not authenticated**, so the application is **not suitable for sensitive communication over untrusted networks**.
+> **Project status:** Work in progress, built for learning systems programming and applied cryptography. It has not been audited and is **not suitable for protecting sensitive communication**. See [Security Considerations](#security-considerations).
 
 ## Features
 
-- **Encrypted messaging:** XChaCha20-Poly1305 authenticated encryption with a fresh random 24-byte nonce for every message.
-- **Client-to-client key exchange:** Ephemeral public/private key pairs and directional session keys derived with libsodium's `crypto_kx` API.
-- **Ciphertext-only relay:** The server routes handshake frames and encrypted message frames without holding client session keys or reading chat content.
-- **Concurrent connections:** A thread-per-client server with a current limit of **two connected clients**.
-- **Framed TCP protocol:** A 4-byte length prefix and 1-byte message type distinguish messages and connection events.
-- **Connection lifecycle handling:** Join/leave notifications, session reset when a peer disconnects, and a new handshake when a peer joins.
-- **Terminal chat interface:** Colored incoming messages, editable input, prompt redraw, and restoration of terminal settings on exit.
+- **End-to-end encryption:** XChaCha20-Poly1305 authenticated encryption with a fresh random 24-byte nonce for every message.
+- **Ephemeral key exchange:** A new key pair per session, with directional `rx`/`tx` session keys derived using libsodium's `crypto_kx` API. Secret keys are wiped from memory as soon as the session keys are derived.
+- **Session fingerprints:** After the handshake, each client prints a hash of both public keys. Matching fingerprints on both sides show that no one replaced the keys in transit.
+- **Ciphertext-only relay:** The server forwards only `HANDSHAKE` and `MESSAGE` frames between clients. Clients cannot forge server control messages; a client that sends any other frame type is disconnected.
+- **Input validation:** Frame lengths, message types, roles, public-key sizes and ciphertext sizes are checked before use. Malformed or unauthenticated data is rejected without crashing the client.
+- **Two-person rooms:** A thread-per-client server that admits **two clients**; a third receives an error and is disconnected.
+- **Connection lifecycle handling:** Join/leave notifications from the server, session keys wiped when a peer leaves, and a fresh handshake when a new peer joins.
+- **Terminal chat interface:** Colored messages, live line editing, prompt redraw when messages arrive, and terminal settings restored on every exit path.
+- **Configurable host and port:** Set from the command line, defaulting to `127.0.0.1:8080`.
 
 ## Tech Stack
 
@@ -23,7 +25,7 @@ The server forwards encrypted messages without decrypting them. Clients establis
 | Language | C++20 |
 | Transport | POSIX TCP sockets |
 | Concurrency | `std::thread`, `std::mutex`, `std::atomic` |
-| Cryptography | libsodium (`crypto_kx`, XChaCha20-Poly1305) |
+| Cryptography | libsodium (`crypto_kx`, XChaCha20-Poly1305, BLAKE2b via `crypto_generichash`) |
 | Terminal | `termios`, ANSI escape sequences |
 | Build | GNU Make, `g++` |
 
@@ -31,7 +33,7 @@ The server forwards encrypted messages without decrypting them. Clients establis
 
 ### Prerequisites
 
-- **Linux or macOS** (uses POSIX sockets and terminal APIs)
+- **Linux or macOS** (uses POSIX sockets and terminal APIs; on Windows, use WSL)
 - A C++20-compatible `g++` and `make`
 - **libsodium** and its development headers
 
@@ -56,7 +58,7 @@ cd tcp-chat
 make
 ```
 
-This produces two executables: `server` and `client`.
+This produces two executables: `server` and `client`. Only the client links against libsodium; the server never performs any cryptography.
 
 If the compiler or linker cannot find a Homebrew-installed libsodium on macOS:
 
@@ -73,52 +75,69 @@ make clean
 
 ### Run
 
-Start the relay server in one terminal:
+```text
+./server [port]
+./client [server-ip] [port]
+```
+
+| Program | Argument | Default |
+| --- | --- | --- |
+| `server` | `port` | `8080` |
+| `client` | `server-ip` | `127.0.0.1` |
+| `client` | `port` | `8080` |
+
+**On one computer**, start the server, then a client in each of two other terminals:
 
 ```bash
 ./server
-```
-
-Then start a client in each of two other terminals:
-
-```bash
+./client
 ./client
 ```
 
-Enter a chat name in each client. Once both clients connect, the server assigns handshake roles; clients exchange public keys and derive their session keys. Wait until **`Secure connection established.`** appears before sending messages.
+**Across computers**, pass the server machine's address:
 
-Type a message and press Enter to send. To leave, type **`q()`** and press Enter.
+```bash
+./server 9000                  # on the server machine
+./client 192.168.1.20 9000     # on each client machine
+```
 
-**Network defaults:** The server listens on TCP port **8080** on all interfaces. The client connects to **`127.0.0.1:8080`**. For use across computers, change the IP address in `client.cpp` to the server's reachable address and rebuild. Command-line host/port options are not implemented yet.
+Then:
 
-**Current capacity:** The server intentionally permits only **two connected clients**. A third client receives an error.
+1. Enter a chat name in each client.
+2. When both clients are connected, they exchange public keys automatically. Wait for **`Secure connection established.`**
+3. **Compare the fingerprint** printed below that line with your peer, in person, by phone or through another trusted channel. If the two fingerprints do not match exactly, someone may be intercepting the connection; do not continue.
+4. Type a message and press Enter to send. To leave, type **`q()`** and press Enter, or press **Ctrl+C**.
+
+**Networking notes:**
+
+- The server listens on **all interfaces**, so other machines can reach it, provided the firewall allows the port.
+- When the server runs inside **WSL**, other machines can't reach it by default. Enable WSL's mirrored networking mode, or run the server on another machine.
+- On **macOS**, only `127.0.0.1` is a working loopback address by default. Other `127.x.x.x` addresses that work on Linux will fail there.
 
 ## How It Works
 
 ```text
 Client A                    Relay Server                    Client B
    |                             |                              |
-   |-------- TCP connect ------->|<-------- TCP connect -------|
-   |<------- PEER_JOINED --------|-------- PEER_JOINED -------->|
+   |-------- TCP connect ------->|<-------- TCP connect --------|
+   |<-- PEER_JOINED (initiator) -|- PEER_JOINED (responder) --->|
    |                             |                              |
-   |--- HANDSHAKE (public key) ->|--- HANDSHAKE (public key) --->|
-   |<-- HANDSHAKE (public key) --|<-- HANDSHAKE (public key) ----|
+   |--- HANDSHAKE (public key) ->|--- HANDSHAKE (public key) -->|
+   |<-- HANDSHAKE (public key) --|<-- HANDSHAKE (public key) ---|
    |                             |                              |
-   |    derive session keys      |      derive session keys     |
+   |  derive rx/tx, wipe secret  |  derive rx/tx, wipe secret   |
+   |  print fingerprint          |  print fingerprint           |
    |                             |                              |
    |--- MESSAGE (ciphertext) --->|--- MESSAGE (ciphertext) ---->|
-   |                             |                              |
    |<-- MESSAGE (ciphertext) ----|<-- MESSAGE (ciphertext) -----|
 ```
 
-1. The server accepts two TCP connections and tells each client which key-exchange role to use.
-2. Each client generates a temporary key pair using `crypto_kx_keypair()` and sends its public key through the server.
-3. Each endpoint uses its private key and the other endpoint's public key to derive **receive (`rx`)** and **transmit (`tx`)** keys.
-4. A client encrypts `name : message` with its `tx` key and a new random nonce.
-5. The server relays the encrypted frame; the recipient decrypts it using its `rx` key and displays the message.
-6. When a peer leaves, the remaining client clears its session and waits for a new peer and handshake.
-
-The server **does not possess the client-derived session keys**. However, because clients do not authenticate the exchanged public keys, a malicious relay or active network attacker could impersonate a peer. See [Security Considerations](#security-considerations).
+1. When a second client connects, the server sends `PEER_JOINED` to both, assigning the **initiator** role to the client that connected first and the **responder** role to the other. `crypto_kx` requires the two sides to take different roles.
+2. Each client wipes any previous session, generates a fresh key pair with `crypto_kx_keypair()`, and sends its public key in a `HANDSHAKE` frame.
+3. On receiving the peer's key, each client checks its size, derives a **receive (`rx`)** and a **transmit (`tx`)** key, and wipes its secret key. One side's `tx` equals the other side's `rx`.
+4. Each client hashes both public keys, in a fixed initiator-then-responder order, with BLAKE2b and prints the result as the session fingerprint.
+5. Messages (`name : message`) are encrypted with `tx` and a new random nonce, relayed by the server, and decrypted by the recipient with `rx`. Anything that fails authentication is rejected.
+6. When a peer disconnects, the server sends `PEER_LEFT`; the remaining client wipes its session keys and waits for a new peer and a new handshake.
 
 ### TCP Frame Format
 
@@ -130,12 +149,19 @@ Each frame is encoded as:
 +----------------------+-------------------+-------------------------+
 ```
 
-- **Length:** Unsigned 32-bit integer in network byte order, counting the type byte and body (not the length prefix).
-- **Type:** `MESSAGE`, `HANDSHAKE`, `PEER_JOINED`, `PEER_LEFT`, or `ERROR_MSG`.
-- **Body:** Depends on the message type. For `MESSAGE`, it contains the nonce followed by encrypted message data and its authentication tag.
-- **Limit:** The current maximum frame length is **8,192 bytes**, including the type byte. Encryption overhead further reduces the maximum plaintext size.
+- **Length:** Unsigned 32-bit integer in network byte order, counting the type byte and body (not the length prefix itself). Frames shorter than 1 byte or longer than the maximum are rejected and the connection is closed.
+- **Type:** One of the values below.
+- **Limit:** The maximum frame length is **8,192 bytes**, including the type byte. Encryption adds 40 bytes per message, which reduces the maximum plaintext size.
 
-The `readNBytes()` and `sendAll()` helpers handle reads and writes that transfer fewer bytes than requested, since TCP does not preserve application message boundaries.
+| Type | Value | Sent by | Body |
+| --- | --- | --- | --- |
+| `MESSAGE` | 1 | client (relayed) | `[24-byte nonce][ciphertext][16-byte tag]` |
+| `HANDSHAKE` | 2 | client (relayed) | 32-byte X25519 public key |
+| `PEER_JOINED` | 3 | server only | 1 byte: `1` = initiator, `0` = responder |
+| `PEER_LEFT` | 4 | server only | notice text |
+| `ERROR_MSG` | 5 | server only | error text (for example, room full) |
+
+The `readNBytes()` and `sendAll()` helpers handle reads and writes that transfer fewer bytes than requested, since TCP does not preserve message boundaries. `sendFrame()` and `receiveFrame()` build and parse frames, and are shared by the client and server so both always use the same format.
 
 ### Encryption
 
@@ -145,18 +171,18 @@ The `readNBytes()` and `sendAll()` helpers handle reads and writes that transfer
 [24-byte nonce][ciphertext][16-byte authentication tag]
 ```
 
-The tag allows the recipient to reject ciphertext that fails authentication. Clients derive new session keys when a new peer connection is established; there is no persistent shared `chat.key` file in this implementation.
+The tag lets the recipient reject any message that was altered, truncated or encrypted with a different key. Because each direction has its own key, a message cannot be reflected back to its sender. No key files are needed: all keys are generated at runtime and exist only for the length of a session.
 
 ## Project Structure
 
 ```text
 tcp-chat/
-├── client.cpp          # Connection logic, handshake, encryption, terminal UI
-├── server.cpp          # Two-client TCP relay and connection lifecycle
-├── crypto.cpp          # Session key generation, derivation, AEAD helpers
+├── client.cpp          # Connection, handshake handling, terminal UI, send/receive threads
+├── server.cpp          # Two-client relay, role assignment, connection lifecycle
+├── crypto.cpp          # Key pairs, session key derivation, fingerprints, AEAD helpers
 ├── crypto.hpp          # Session structure and cryptography declarations
 ├── net.cpp             # Framing and complete socket read/write helpers
-├── net.hpp             # Protocol types, limits, networking declarations
+├── net.hpp             # Message types, roles, limits, networking declarations
 ├── terminal_test.cpp   # Terminal input experiments
 ├── Makefile            # Build and clean targets
 ├── .gitignore
@@ -168,23 +194,29 @@ tcp-chat/
 
 This is an experimental application, **not an audited or production-ready secure messenger**.
 
-- **Unauthenticated key exchange:** `crypto_kx` establishes shared secrets, but the application does not verify public-key ownership. It does not currently resist an active man-in-the-middle attack.
-- **No replay protection:** A previously captured valid encrypted message may be resent without being detected as a replay.
-- **No authenticated user identities:** The display name is user-provided and is not tied to a verified identity.
-- **Concurrent session state:** The send and receive threads access shared session data; stronger synchronization is needed around key lifecycle transitions.
-- **No private conversations or message history:** The application currently supports one two-person session and does not persist chat history.
+- **Fingerprint checks are manual:** The key exchange does not authenticate who sent each public key. A malicious server or active attacker could substitute its own keys; this is detected **only if both users compare their fingerprints** through a separate channel.
+- **No long-term identity:** Fingerprints change every session, so they must be compared every time. There are no persistent identity keys and no "trust on first use."
+- **No replay protection:** A captured valid message could be re-sent, and messages could be dropped or reordered, without detection.
+- **Message type not bound to ciphertext:** The frame type is not yet included as authenticated additional data.
+- **Display names are not authenticated:** The chat name is chosen by the sender and only travels inside the encrypted message.
+- **Metadata is visible to the server:** It sees when clients connect, message sizes and timing, though not message content.
+- **One conversation at a time:** The server supports a single two-person session and keeps no history.
 
 Do not rely on this project to protect sensitive information.
 
 ## Roadmap
 
-- [ ] Authenticate peers and verify exchanged public keys
-- [ ] Harden session state management and synchronization
-- [ ] Add replay detection and protocol-level tests
-- [ ] Support multiple independent peer conversations and targeted routing
-- [ ] Make server address and port configurable
-- [ ] Add load testing and connection/latency benchmarks
-- [ ] Improve disconnect, terminal, and error handling
+- [x] Client-to-client key exchange with ephemeral keys
+- [x] Session fingerprints for detecting man-in-the-middle attacks
+- [x] Server relays only client frame types; control messages come only from the server
+- [x] Make server address and port configurable
+- [x] Improve disconnect, terminal and error handling
+- [ ] Bind the frame type to each ciphertext as authenticated additional data
+- [ ] Add message counters for replay and reordering detection
+- [ ] Long-term identity keys with trust on first use, so peers are verified once
+- [ ] Automated protocol and malformed-input tests
+- [ ] Support multiple independent conversations and group chat
+- [ ] Replace thread-per-client with `poll()`, and add load and latency benchmarks
 
 ## License
 
