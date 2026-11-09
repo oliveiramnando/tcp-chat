@@ -13,20 +13,104 @@
 #include <mutex>
 #include <csignal>
 
+#include <sodium.h>
+
+#include <map>
+
 #include "net.hpp"
+#include "crypto.hpp"
 
 #define MAX_CLIENTS 2
 
 using namespace std;
+using ClientMap = map<PeerId, int>;     // logged in userid -> socket; instead of clients vector
 
 mutex clientsMutex;
 mutex coutMutex;
 
-void clientHandler(int clientSocket, vector<int>& clients)
+void clientHandler(int clientSocket, ClientMap& clients)
 {
-	{
+    // send challenge 
+    array<unsigned char, CHALLENGE_BYTES> challenge{};
+    randombytes_buf(challenge.data(), challenge.size());
+
+    vector<unsigned char> challengePayload(challenge.begin(), challenge.end());
+    if (!sendFrame(clientSocket, MsgType::CHALLENGE, challengePayload))
+    {
+        lock_guard<mutex> lock(coutMutex);
+        cerr << "Failed to send challenge to client" << endl;
+        close(clientSocket);
+        return;
+    }
+
+    // receive auth and verify against login_label + challenge
+    constexpr size_t AUTH_BODY_BYTES = crypto_sign_PUBLICKEYBYTES + crypto_sign_BYTES;  // 32+ 64 bytes
+
+    MsgType type;
+    string authBody;
+    if(!receiveFrame(clientSocket, type, authBody) || type != MsgType::AUTH || authBody.size() != AUTH_BODY_BYTES)
+    {
+        {
+            lock_guard<mutex> lock(coutMutex);
+            cout << "\r\033[K";
+            cerr << "Client disconnected or Error receiving frame." << endl;
+        }
+        // reject client 
+        return;
+    }
+
+    // split into pk and sig
+    PeerId clientId{};
+    unsigned char signature[crypto_sign_BYTES];
+    memcpy(clientId.data(), authBody.data(), clientId.size());
+    memcpy(signature, authBody.data() + clientId.size(), crypto_sign_BYTES);
+
+    // rebuild what client should've sent
+    vector<unsigned char> message = buildLoginMessage(challenge);
+
+    // verify
+    if (crypto_sign_verify_detached(signature, message.data(), message.size(), clientId.data()) != 0)
+    {
+        // reject 
+        return;
+    }
+
+    {
+        lock_guard<mutex> lock(clientsMutex);
+
+        if (clients.count(clientId) > 0)
+        {
+            // reject
+            return;
+        }
+        if (clients.size() >= MAX_CLIENTS)
+        {
+            // reject
+            return;
+        }
+
+        if (!sendFrame(clientSocket, MsgType::AUTH_OK, {}))
+        {
+            close(clientSocket);
+            return;
+        }
+
+        clients[clientId] = clientSocket;
+
+        if (clients.size() == MAX_CLIENTS)
+        {
+            for (const auto& [otherId, otherSocket] : clients)
+            {
+                if (otherId == clientId) { continue; }
+                sendFrame(otherSocket,  MsgType::PEER_JOINED, {static_cast<unsigned char>(Role::INITIATOR)});
+                sendFrame(clientSocket, MsgType::PEER_JOINED, {static_cast<unsigned char>(Role::RESPONDER)});
+            }
+        }
+    }
+
+    {
 		lock_guard<mutex> lock(coutMutex);
-		cout << "Accepted client connection" << endl;
+		cout << "Logged in: " << idFingerPrint(clientId.data()) << endl;
 	}
 
     while (true)
@@ -74,7 +158,7 @@ void clientHandler(int clientSocket, vector<int>& clients)
 
 	{
 		lock_guard<mutex> lock(clientsMutex);
-		erase(clients, clientSocket);
+		clients.erase(clientId);
 
         // send peer left to remaining clients
         MsgType peerLeft = MsgType::PEER_LEFT;
@@ -96,6 +180,12 @@ void clientHandler(int clientSocket, vector<int>& clients)
 int main(int argc, char* argv[])
 {
 	signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE signal to prevent abrupt termination
+
+    if (sodium_init() < 0)
+    {
+        cerr << "Failed to initialize libsodium" << endl;
+        return 1;
+    }
     // create server socket
     int serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (serverSocket < 0)
@@ -154,77 +244,16 @@ int main(int argc, char* argv[])
 		return 1;
     }
 
-    vector<int> clients;
+    // vector<int> clients;
+    ClientMap clients;
 
     while (true)
-    {
-		// accept client connection
+    {	
 		int clientSocket = accept(serverSocket, nullptr, nullptr);
-		if (clientSocket < 0)
-		{
-			perror("Failed to accept client socket");
-			continue;
-		}
-		
-		// add client to vector, let thread handle that client
+        if (clientSocket < 0)
         {
-            lock_guard<mutex> lock(clientsMutex);
-            if (clients.size() >= MAX_CLIENTS)
-            {
-                lock_guard<mutex> lock(coutMutex);
-
-                MsgType errorType = MsgType::ERROR_MSG;
-                string errorMessage = "MAX CLIENTS HAVE BEEN REACHED.";
-
-                cerr << errorMessage << endl;
-
-                vector<unsigned char> errorMsg(errorMessage.begin(), errorMessage.end()); 
-                if (!sendFrame(clientSocket, errorType, errorMsg))
-                {
-                    cerr << "Could not send frame to client" << endl;
-                }
-                close(clientSocket);
-                continue;
-            }
-        }
-
-        {
-			lock_guard<mutex> lock(clientsMutex);
-			clients.push_back(clientSocket);
-
-            // if size of clients vector is 2, notify all clients that peer joined
-            if (clients.size() == MAX_CLIENTS)
-            {
-                lock_guard<mutex> lock(coutMutex);
-
-                MsgType peerJoined = MsgType::PEER_JOINED;
-
-                cerr << "PEER JOINED" << endl;
-
-                vector<unsigned char> initPayload{static_cast<unsigned char>(Role::INITIATOR)}; 
-                if (!sendFrame(clients[0], peerJoined, initPayload))
-                {
-                    cerr << "Failed to send message to client" << endl;
-                }
-
-                vector<unsigned char> resPayload{static_cast<unsigned char>(Role::RESPONDER)}; 
-                if (!sendFrame(clients[1], peerJoined, resPayload))
-                {
-                    cerr << "Failed to send message to client" << endl;
-                }
-                // for (int cli: clients)
-	            // {
-	            // 	if (!sendFrame(cli, peerJoined, payLoad))
-	            // 	{
-	            // 		cerr << "Failed to send message to client" << endl;
-	            // 	}
-	            // }
-            }
-            else 
-            {
-                lock_guard<mutex> lock(coutMutex);
-                cout << "Waiting for peer..." << endl;
-            }
+            perror("Accept");
+            continue;
         }
 
 		thread cli(clientHandler, clientSocket, ref(clients));
