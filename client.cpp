@@ -390,6 +390,54 @@ int main(int argc, char* argv[])
 
     cout << "Connected to server" << endl;
 
+    MsgType type;
+    string body;
+
+    if (!receiveFrame(clientSocket, type, body) || type != MsgType::CHALLENGE || body.size() != CHALLENGE_BYTES)
+    {
+        cerr << "Login failed: unexpected reply from server." << endl;
+        return 1;
+    }
+
+    array<unsigned char, CHALLENGE_BYTES> challenge{}
+    memcpy(challenge.data(), body.data(), challenge.size());
+    
+    // sign label and challenge
+    unsigned char signature[crypto_sign_BYTES];
+    if (!signLogin(id, challenge, signature))
+    {
+        cerr << "Login failed: Could not sign challenge." << endl;
+        return 1;
+    }
+
+    vector<unsigned char> auth(id.pk, id.pk + crypto_sign_BYTES);
+    auth.insert(auth.end(), signature, signature + crypto_sign_BYTES);
+
+    if (!sendFrame(clientSocket, MsgType::AUTH, auth))
+    {
+        cerr << "Login failed: could not send AUTH." << endl;
+        return 1;
+    }
+
+    // 4. wait for AUTH_OK (or the server's error message)
+    if (!receiveFrame(clientSocket, type, body))
+    {
+        cerr << "Login failed: server closed the connection." << endl;
+        return 1;
+    }
+    if (type == MsgType::ERROR_MSG)
+    {
+        cerr << "Login failed: " << body << endl;
+        return 1;
+    }
+    if (type != MsgType::AUTH_OK)
+    {
+        cerr << "Login failed: unexpected reply from server." << endl;
+        return 1;
+    }
+
+    cout << "Logged in." << endl;
+
     cout << "Enter your chat name: ";
     string name;
     getline(cin, name);
