@@ -59,9 +59,11 @@ void wipeSession(Session &s)
 
     s.hasKeyPair = false;
     s.ready = false;
+
+    s.isInitiator = false;
 }
 
-string sessionFingerPrint(Session& s)
+string sessionFingerPrint(const Session& s)
 {
     constexpr size_t BUFFER_SIZE = crypto_kx_PUBLICKEYBYTES * 2;
 
