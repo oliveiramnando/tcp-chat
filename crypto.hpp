@@ -7,6 +7,8 @@
 #include <sodium.h>
 #include <string>
 
+#include"net.hpp"
+
 struct Identity
 {
     unsigned char pk[crypto_sign_PUBLICKEYBYTES]{}; 
@@ -29,6 +31,8 @@ struct Session
 };
 
 bool loadOrCreateIdentity(const std::string& path, Identity& id);
+
+bool signLogin(const Identity& id, const std::array<unsigned char, CHALLENGE_BYTES>& challenge, unsigned char signature[crypto_sign_BYTES]);
 
 std::string idFingerPrint(const unsigned char* pk);
 

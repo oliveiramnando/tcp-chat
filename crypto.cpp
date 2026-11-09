@@ -86,6 +86,13 @@ bool loadOrCreateIdentity(const string& path, Identity& id)
     return true;
 }
 
+bool signLogin(const Identity& id, const array<unsigned char, CHALLENGE_BYTES>& challenge, unsigned char signature[crypto_sign_BYTES])
+{
+    vector<unsigned char> message = buildLoginMessage(challenge);
+
+    return crypto_sign_detached(signature, nullptr, message.data(), message.size(), id.sk) == 0;
+}
+
 string idFingerPrint(const unsigned char* pk)
 {
     constexpr size_t BUFFER_SIZE = crypto_sign_PUBLICKEYBYTES;
