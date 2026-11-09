@@ -322,14 +322,18 @@ int main(int argc, char* argv[])
 
     if (sodium_init() < 0)
     {
-        cerr << "Failed to initialize libsodium" << endl;
+        cerr << "Failed to initialize libsodium." << endl;
         return 1;
     }
 
     Identity id;
-    loadOrCreateIdentity("identity.key", id);
+    if (!loadOrCreateIdentity("identity.key", id))
+    {
+        cerr << "Failed to load identity." << endl;
+        return 1;
+    }
 
-    cout << "Your fingerprint: " << idFingerPrint(id) << endl;
+    cout << "Your fingerprint: " << idFingerPrint(id.pk) << endl;
 
     // create client socket
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
