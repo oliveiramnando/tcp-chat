@@ -41,6 +41,8 @@ bool deriveSessionKeys(Session &s, bool isInitiator, const string &peerPk)
         }
     }
 
+    memcpy(s.peerPk, pk, crypto_kx_PUBLICKEYBYTES);
+
     sodium_memzero(s.sk, crypto_kx_SECRETKEYBYTES);     // sk no longer used so wipe it
 
     return true;
@@ -52,8 +54,56 @@ void wipeSession(Session &s)
     sodium_memzero(s.sk , crypto_kx_SECRETKEYBYTES);
     sodium_memzero(s.rx , crypto_kx_SESSIONKEYBYTES);
     sodium_memzero(s.tx , crypto_kx_SESSIONKEYBYTES);
+
+    sodium_memzero(s.peerPk, crypto_kx_PUBLICKEYBYTES);
+
     s.hasKeyPair = false;
     s.ready = false;
+}
+
+string sessionFingerPrint(Session& s)
+{
+    constexpr size_t BUFFER_SIZE = crypto_kx_PUBLICKEYBYTES * 2;
+
+    unsigned char buffer[BUFFER_SIZE]{};   // [intiator 32 bytes][responder 32 bytes]
+    if (s.isInitiator)
+    {
+        memcpy(buffer, s.pk, crypto_kx_PUBLICKEYBYTES);
+        memcpy(buffer + crypto_kx_PUBLICKEYBYTES, s.peerPk, crypto_kx_PUBLICKEYBYTES);
+
+    } else
+    {
+        memcpy(buffer, s.peerPk, crypto_kx_PUBLICKEYBYTES);
+        memcpy(buffer + crypto_kx_PUBLICKEYBYTES, s.pk, crypto_kx_PUBLICKEYBYTES);
+    }
+
+    unsigned char hash[crypto_generichash_BYTES]{}; 
+    if (crypto_generichash(hash, crypto_generichash_BYTES,
+                       buffer, BUFFER_SIZE,
+                       nullptr, 0) != 0)
+    {
+        return "ERROR: Error hashing fingerprint";
+    }
+
+    // format it; convert part of it with sodium_bin2hex and insert space every 4 char
+    char hex[crypto_generichash_BYTES]{};
+    if (sodium_bin2hex(hex, crypto_generichash_BYTES,
+                   hash, crypto_generichash_BYTES) != 0)
+    {
+        return "ERRORL Error coverting bin2hex in fingerprint";
+    }
+
+    string fingerPrint = "";
+
+    for (int i = 0; hex[i] != '\0'; ++i) {
+        // Add a space every 4 characters (but not at the very beginning)
+        if (i > 0 && i % 4 == 0) {
+            fingerPrint += ' ';
+        }
+        fingerPrint += hex[i];
+    }
+
+    return fingerPrint;
 }
 
 bool encrypt(const string& message, vector<unsigned char>& encrypted, const unsigned char* key)
