@@ -316,7 +316,7 @@ void sendMsg(int clientSocket, const string& name, Session& session)
 }
 
 
-int main()
+int main(int argc, char* argv[])
 {
     signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE signal to prevent abrupt termination
 
@@ -336,20 +336,46 @@ int main()
 
     cout << "Client socket created" << endl;
 
+    const char* serverIp = "127.0.0.1"; // default : this computer
+    int portNum = 8080;                 // default : 8080
+    if (argc > 1)
+    {
+        serverIp = argv[1];
+    }
+
+    if (argc > 2)
+    {
+        try
+        {
+            portNum = stoi(argv[2]);
+        }
+        catch (const exception& e)
+        {
+            cerr << "Invalid port: " << argv[2] << e.what() << endl;
+            return 1;
+        }
+        if (portNum < 1 || portNum > 65535)
+        {
+            cerr << "Port must be between 1 and 65535" << endl;
+            return 1;
+        }
+    }
+
     // define server address
     sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(8080);
-    if (inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr) <= 0)
+    serverAddr.sin_port = htons(portNum);
+
+    if (inet_pton(AF_INET, serverIp, &serverAddr.sin_addr) <= 0)
     {
-        perror("Invalid server address");
+        cerr << "Invalid server address:" << serverIp << endl;
         return 1;
     }
 
     // connect to server
     if (connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0)
     {
-		perror("Failed to connect to server");
+		cerr << "Failed to connect to server" << endl;
 		return 1;
     }
 
