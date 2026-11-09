@@ -28,7 +28,7 @@ bool deriveSessionKeys(Session& s, const std::string& peerPk);
 
 void wipeSession(Session& s);
 
-std::string sessionFingerPrint(Session& s);
+std::string sessionFingerPrint(const Session& s);
 
 bool encrypt(const std::string& message, std::vector<unsigned char>& encrypted, const unsigned char* key);
 
