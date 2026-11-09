@@ -7,6 +7,12 @@
 #include <sodium.h>
 #include <string>
 
+struct Identity
+{
+    unsigned char pk[crypto_sign_PUBLICKEYBYTES]{}; 
+    unsigned char sk[crypto_sign_SECRETKEYBYTES]{};
+};
+
 struct Session
 {
     unsigned char pk[crypto_kx_PUBLICKEYBYTES]{}; 
@@ -21,6 +27,10 @@ struct Session
 
     bool isInitiator = false;
 };
+
+bool loadOrCreateIdentity(const std::string& path, Identity& id);
+
+std::string idFingerPrint(const Identity& id);
 
 void makeKeyPair(Session& s);
 
