@@ -24,7 +24,7 @@ struct Session
 
 void makeKeyPair(Session& s);
 
-bool deriveSessionKeys(Session& s, bool isInititor, const std::string& peerPk);
+bool deriveSessionKeys(Session& s, const std::string& peerPk);
 
 void wipeSession(Session& s);
 
