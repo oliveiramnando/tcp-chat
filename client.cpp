@@ -41,7 +41,6 @@ void restoreTerminal()
 
 void receiveMsg(int clientSocket, Session& session)
 {
-    optional<Role> role;
     while (true)
     {
         MsgType type;
@@ -76,7 +75,7 @@ void receiveMsg(int clientSocket, Session& session)
 
                     cout << "HANDSHAKE RECEIVED" << endl;
 
-                    if (!deriveSessionKeys(session, role == Role::INITIATOR, body))
+                    if (!deriveSessionKeys(session, body))
                     {
                         cout << "\r\033[K";
                         cerr << "Failed to derive session keys." << endl;
@@ -86,6 +85,9 @@ void receiveMsg(int clientSocket, Session& session)
                     }
 
                     cout << "Secure connection established." << endl;
+
+                    string fingerPrint = sessionFingerPrint(session);
+                    cout << fingerPrint << endl;
 
                     session.ready = true;
 
@@ -104,22 +106,8 @@ void receiveMsg(int clientSocket, Session& session)
                     }
 
                     uint8_t roleByte = static_cast<uint8_t>(body[0]);
-
-                    if (roleByte == static_cast<uint8_t>(Role::INITIATOR))
-                    {
-                        role = Role::INITIATOR;
-                    }
-                    else if (roleByte == static_cast<uint8_t>(Role::RESPONDER)) 
-                    {
-                        role = Role::RESPONDER;
-                    }
-                    else 
-                    {
-                        cout << "\r\033[K";
-                        cout << "Invalid role on PEER_JOIN from server." << endl;
-                        exit(1);
-                    }
-
+                    session.isInitiator = (roleByte == static_cast<uint8_t>(Role::INITIATOR));
+                    
                     cout << "\r\033[K";
                     cout << "PEER JOINED." << endl;
                 
