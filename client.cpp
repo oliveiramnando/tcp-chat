@@ -106,17 +106,24 @@ void receiveMsg(int clientSocket, Session& session)
                     }
 
                     uint8_t roleByte = static_cast<uint8_t>(body[0]);
+                    if (roleByte != static_cast<uint8_t>(Role::INITIATOR) && roleByte != static_cast<uint8_t>(Role::RESPONDER) ) 
+                    {
+                        cout << "\r\033[K";
+                        cerr << "Invalid role on PEER_JOIN from server." << endl;
+                        exit(1);
+                    }
+
+                    wipeSession(session);
+
                     session.isInitiator = (roleByte == static_cast<uint8_t>(Role::INITIATOR));
-                    
+                    peerConnected = true;
+
                     cout << "\r\033[K";
                     cout << "PEER JOINED." << endl;
-                
-                    peerConnected = true;
 
                     cout << "Establishing secure connection..." << endl;
 
                     // start the handshake
-                    wipeSession(session);
                     makeKeyPair(session);
                     
                     MsgType handshake = MsgType::HANDSHAKE;
