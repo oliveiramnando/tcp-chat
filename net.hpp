@@ -7,7 +7,9 @@
 #include <cstdint>
 #include <array>
 
-#define MAX_MESSAGE_SIZE 8192
+constexpr std::size_t MAX_MESSAGE_SIZE = 8192;
+constexpr std::size_t CHALLENGE_BYTES = 32;
+constexpr char LOGIN_LABEL[] = "tcpchat-login-v1";
 
 using PeerId = std::array<unsigned char, 32>;
 
@@ -17,12 +19,17 @@ enum class MsgType : uint8_t {
     PEER_JOINED=3,
     PEER_LEFT=4,
     ERROR_MSG=5,
+    CHALLENGE=6,
+    AUTH=7,
+    AUTH_OK=8,
 };
 
 enum class Role : uint8_t {
     RESPONDER=0,
     INITIATOR=1,
 };
+
+std::vector<unsigned char> buildLoginMessage(const std::array<unsigned char, CHALLENGE_BYTES>& challenge);
 
 bool readNBytes(int clientSocket, char* buffer, size_t n);
 
