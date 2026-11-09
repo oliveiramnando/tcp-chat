@@ -87,7 +87,7 @@ void receiveMsg(int clientSocket, Session& session)
                     cout << "Secure connection established." << endl;
 
                     string fingerPrint = sessionFingerPrint(session);
-                    cout << fingerPrint << endl;
+                    cout << "Session fingerprint: " << fingerPrint << endl;
 
                     session.ready = true;
 
@@ -325,6 +325,11 @@ int main(int argc, char* argv[])
         cerr << "Failed to initialize libsodium" << endl;
         return 1;
     }
+
+    Identity id;
+    loadOrCreateIdentity("identity.key", id);
+
+    cout << "Your fingerprint: " << idFingerPrint(id) << endl;
 
     // create client socket
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
