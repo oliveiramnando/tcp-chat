@@ -1,5 +1,5 @@
 build/
 .env
 
-chat.key
+identity.key
 *.dSYM
