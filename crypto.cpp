@@ -17,7 +17,7 @@ void makeKeyPair(Session &s)
     s.ready = false;
 }
 
-bool deriveSessionKeys(Session &s, bool isInitiator, const string &peerPk)
+bool deriveSessionKeys(Session &s, const string &peerPk)
 {
     if (!s.hasKeyPair || peerPk.size() != crypto_kx_PUBLICKEYBYTES)
     {
@@ -25,7 +25,7 @@ bool deriveSessionKeys(Session &s, bool isInitiator, const string &peerPk)
     }
     unsigned char pk[crypto_kx_PUBLICKEYBYTES];
     memcpy(&pk, peerPk.data(), crypto_kx_PUBLICKEYBYTES);
-    if (isInitiator)
+    if (s.isInitiator)
     {
         if (crypto_kx_server_session_keys(s.rx, s.tx, 
                                           s.pk, s.sk, pk) != 0)
@@ -78,20 +78,11 @@ string sessionFingerPrint(Session& s)
     }
 
     unsigned char hash[crypto_generichash_BYTES]{}; 
-    if (crypto_generichash(hash, crypto_generichash_BYTES,
-                       buffer, BUFFER_SIZE,
-                       nullptr, 0) != 0)
-    {
-        return "ERROR: Error hashing fingerprint";
-    }
+    crypto_generichash(hash, crypto_generichash_BYTES, buffer, BUFFER_SIZE, nullptr, 0);
 
     // format it; convert part of it with sodium_bin2hex and insert space every 4 char
-    char hex[crypto_generichash_BYTES]{};
-    if (sodium_bin2hex(hex, crypto_generichash_BYTES,
-                   hash, crypto_generichash_BYTES) != 0)
-    {
-        return "ERRORL Error coverting bin2hex in fingerprint";
-    }
+    char hex[crypto_generichash_BYTES * 2 + 1]{};
+    sodium_bin2hex(hex, sizeof(hex), hash, crypto_generichash_BYTES);
 
     string fingerPrint = "";
 
