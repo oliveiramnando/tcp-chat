@@ -30,7 +30,7 @@ struct Session
 
 bool loadOrCreateIdentity(const std::string& path, Identity& id);
 
-std::string idFingerPrint(const Identity& id);
+std::string idFingerPrint(const unsigned char* pk);
 
 void makeKeyPair(Session& s);
 

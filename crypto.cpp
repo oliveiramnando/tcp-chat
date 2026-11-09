@@ -86,12 +86,12 @@ bool loadOrCreateIdentity(const string& path, Identity& id)
     return true;
 }
 
-string idFingerPrint(const Identity& id)
+string idFingerPrint(const unsigned char* pk)
 {
     constexpr size_t BUFFER_SIZE = crypto_sign_PUBLICKEYBYTES;
 
     unsigned char buffer[BUFFER_SIZE]{};
-    memcpy(buffer, id.pk, crypto_sign_PUBLICKEYBYTES);
+    memcpy(buffer, pk, crypto_sign_PUBLICKEYBYTES);
 
     unsigned char hash[crypto_generichash_BYTES]{}; 
     crypto_generichash(hash, crypto_generichash_BYTES, buffer, BUFFER_SIZE, nullptr, 0);
