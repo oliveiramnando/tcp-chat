@@ -93,7 +93,7 @@ void clientHandler(int clientSocket, vector<int>& clients)
 	cout << "Client disconnected" << endl;
 }
 
-int main()
+int main(int argc, char* argv[])
 {
 	signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE signal to prevent abrupt termination
     // create server socket
@@ -106,10 +106,30 @@ int main()
 
     cout << "Server socket created!" << endl;
 
+    int portNum = 8080;                 // default : 8080
+    if (argc > 1)
+    {
+        try
+        {
+            portNum = stoi(argv[1]);
+        }
+        catch (const exception& e)
+        {
+            cerr << "Invalid port: " << argv[1] << e.what() << endl;
+            return 1;
+        }
+        if (portNum < 1 || portNum > 65535)
+        {
+            cerr << "Port must be between 1 and 65535" << endl;
+            return 1;
+        }
+    }
+
+
     // define server address
     sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(8080);
+    serverAddr.sin_port = htons(portNum);
     serverAddr.sin_addr.s_addr = INADDR_ANY; 	// works only on server, where it means "listen on all my address"
 	int yes = 1;
 	if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0)
