@@ -22,6 +22,9 @@ enum class MsgType : uint8_t {
     CHALLENGE=6,
     AUTH=7,
     AUTH_OK=8,
+    USER_LIST=9,
+    USER_ONLINE=10,
+    USER_OFFLINE=11,
 };
 
 enum class Role : uint8_t {
