@@ -20,8 +20,6 @@
 #include "net.hpp"
 #include "crypto.hpp"
 
-#define MAX_CLIENTS 2
-
 using namespace std;
 using ClientMap = map<PeerId, int>;     // logged in userid -> socket; instead of clients vector
 
@@ -120,13 +118,11 @@ void clientHandler(int clientSocket, ClientMap& clients)
         }
 
         // send every other user that the curr user is online 
-        string clientIdString(reinterpret_cast<const char*>(clientId.data()));
-        string onlineMsg = "USER ONLINE [" + clientIdString +"].";
-        vector<unsigned char> olMsg(onlineMsg.begin(), onlineMsg.end());
+        vector<unsigned char> idPayload(clientId.begin(), clientId.end());
         for (const auto & [otherId, otherSocket] : clients)
 	    {
             if (otherId == clientId) { continue; }
-	    	if (!sendFrame(otherSocket, MsgType::USER_ONLINE, olMsg))
+	    	if (!sendFrame(otherSocket, MsgType::USER_ONLINE, idPayload))
 	    	{
 	    		cerr << "Failed to send message to client" << endl;
 	    	}
@@ -173,8 +169,26 @@ void clientHandler(int clientSocket, ClientMap& clients)
         
         vector<unsigned char> sendBody = buildBody(clientId, encryptedMessage);
 
-        int recipientSocket = clients[recipientId];
-        
+        int recipientSocket = -1;
+        {
+            lock_guard<mutex> lock(clientsMutex);
+            auto it = clients.find(recipientId);
+            if (it != clients.end())
+            {   
+                recipientSocket = it->second;
+            }
+        }
+
+        if (recipientSocket < 0)
+        {
+            vector<unsigned char> missingId(recipientId.begin(), recipientId.end());
+            if (!sendFrame(clientSocket, MsgType::ERROR_MSG, missingId))
+            {
+                break;
+            }
+            continue;
+        }
+
         if (!sendFrame(recipientSocket, type, sendBody))
         {
             cerr << "Failed to send message to client" << endl;
@@ -186,12 +200,10 @@ void clientHandler(int clientSocket, ClientMap& clients)
 		clients.erase(clientId);
 
         // send USER OFFLINE to remaining clients
-        string clientIdString(reinterpret_cast<const char*>(clientId.data()));
-        string uoff = "USER OFFLINE [" + clientIdString + "].";
-        vector<unsigned char> offMsg(uoff.begin(), uoff.end());
+        vector<unsigned char> idPayload(clientId.begin(), clientId.end());
         for (const auto & [otherId, otherSocket] : clients)
 	    {
-	    	if (!sendFrame(otherSocket, MsgType::USER_OFFLINE, offMsg))
+	    	if (!sendFrame(otherSocket, MsgType::USER_OFFLINE, idPayload))
 	    	{
 	    		cerr << "Failed to send message to client" << endl;
 	    	}
