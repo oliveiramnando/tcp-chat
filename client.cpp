@@ -399,7 +399,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    array<unsigned char, CHALLENGE_BYTES> challenge{}
+    array<unsigned char, CHALLENGE_BYTES> challenge{};
     memcpy(challenge.data(), body.data(), challenge.size());
     
     // sign label and challenge
@@ -410,7 +410,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    vector<unsigned char> auth(id.pk, id.pk + crypto_sign_BYTES);
+    vector<unsigned char> auth(id.pk, id.pk + crypto_sign_PUBLICKEYBYTES);
     auth.insert(auth.end(), signature, signature + crypto_sign_BYTES);
 
     if (!sendFrame(clientSocket, MsgType::AUTH, auth))
@@ -419,7 +419,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // 4. wait for AUTH_OK (or the server's error message)
+    // wait for AUTH_OK (or the server's error message)
     if (!receiveFrame(clientSocket, type, body))
     {
         cerr << "Login failed: server closed the connection." << endl;
