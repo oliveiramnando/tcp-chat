@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cstdint>
 #include <set>
+#include <map>
 #include <optional>
 
 #include <sys/socket.h>
@@ -33,7 +34,6 @@ mutex terminalMutex;
 mutex userIdsMutex;
 termios origTerminal{};
 atomic<bool> quitting = false;
-atomic<bool> peerConnected = false;
 
 set<PeerId> userIds;
 
@@ -42,8 +42,29 @@ void restoreTerminal()
     tcsetattr(STDIN_FILENO, TCSANOW, &origTerminal);
 }
 
+bool amInitiator(const Identity& me, const PeerId& peer)
+{
+    return memcmp(me.pk, peer.data(), 32) < 0;
+}
 
-void receiveMsg(int clientSocket, Session& session)
+bool startHandshake(int sock, const Identity& me, const PeerId& peer, Session& s)
+{
+    wipeSession(s);
+    s.isInitiator = amInitiator(me, peer);
+    makeKeyPair(s);
+
+    vector<unsigned char> publicKey(s.pk, s.pk + crypto_kx_PUBLICKEYBYTES);
+    vector<unsigned char> payload = buildBody(peer, publicKey);
+    if(!sendFrame(sock, MsgType::HANDSHAKE, payload))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+
+void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity& id)
 {
     while (true)
     {
@@ -64,90 +85,103 @@ void receiveMsg(int clientSocket, Session& session)
         switch(type)
         {
             case MsgType::MESSAGE:
-                break;
+                {
+                    lock_guard<mutex> lock(terminalMutex);
+                    cout << "\r\033[K";
+
+                    PeerId sender{};
+                    vector<unsigned char> payload;
+                    if (!parseBody(body, sender, payload))
+                    {
+                        // cerr here
+                        continue;
+                    }
+
+                    // find taht sender's session
+                    auto it = sessions.find(sender);
+                    if (it == sessions.end() || !it->second.ready)
+                    {
+                        // cerr
+                        continue;
+                    }
+
+                    // decrypt message here with sender's rx jey
+                    vector<unsigned char> decryptedMessage{};
+                    if(!decrypt(decryptedMessage, string(payload.begin(), payload.end()), it->second.rx))
+                    {
+                        cerr << "Failed to decrypt message." << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                        continue;
+                    }
+                    string nameAndMessage(decryptedMessage.begin(), decryptedMessage.end());
+
+                    size_t colonIdx = nameAndMessage.find(" : ");
+                    if (colonIdx == string::npos)
+                    {
+                        cout << "\r\033[K";
+                        cerr << "Client sender does not have a name" << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                        
+                        continue;
+                    }
+                    string name = nameAndMessage.substr(0, colonIdx);
+                    string message = nameAndMessage.substr(colonIdx + 3);
+                        
+                    cout << "\033[94m" << name << "\033[0m : " << message << endl;
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                }
+                continue;
             case MsgType::HANDSHAKE:
                 {
                     lock_guard<mutex> lock(terminalMutex);
 
                     cout << "\r\033[K";
-                    if (session.ready)
+                
+                    // parse body here to extract sender
+                    PeerId sender{};
+                    vector<unsigned char> payload;
+                    if (!parseBody(body, sender, payload))
                     {
-                        cerr << "Session is already ready." << endl;
-                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                        // cerr here
                         continue;
+                    }
+
+                    // look up sender. if no sesiion or no key pair, the peer started handshake, create session  with sender. then call start handshake
+                    auto it = sessions.find(sender);
+                    bool needReply = (it == sessions.end() || !it->second.hasKeyPair || it->second.ready);
+
+                    Session& s = sessions[sender];
+
+                    if (needReply)
+                    {
+                        if (!startHandshake(clientSocket, id, sender, s))
+                        {
+                            // cerr
+                            sessions.erase(sender);
+                            continue;
+                        }
                     }
 
                     cout << "HANDSHAKE RECEIVED" << endl;
 
-                    if (!deriveSessionKeys(session, body))
+
+                    if (!deriveSessionKeys(s, string(payload.begin(), payload.end())))
                     {
                         cout << "\r\033[K";
                         cerr << "Failed to derive session keys." << endl;
                         cerr << "HANDSHAKE rejected." << endl;
+                        wipeSession(s);
+                        sessions.erase(sender);
                         cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                         continue;
                     }
+                    s.ready = true;
 
                     cout << "Secure connection established." << endl;
 
-                    string fingerPrint = sessionFingerPrint(session);
+                    string fingerPrint = sessionFingerPrint(s);
                     cout << "Session fingerprint: " << fingerPrint << endl;
 
-                    session.ready = true;
-
-                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-                }
-                continue;
-            case MsgType::PEER_JOINED:
-                {
-                    lock_guard<mutex> lock(terminalMutex);
-
-                    if (body.size() != sizeof(uint8_t))
-                    {
-                        cout << "\r\033[K";
-                        cerr << "Invalid payload on PEER_JOIN from server." << endl;
-                        exit(1);
-                    }
-
-                    uint8_t roleByte = static_cast<uint8_t>(body[0]);
-                    if (roleByte != static_cast<uint8_t>(Role::INITIATOR) && roleByte != static_cast<uint8_t>(Role::RESPONDER) ) 
-                    {
-                        cout << "\r\033[K";
-                        cerr << "Invalid role on PEER_JOIN from server." << endl;
-                        exit(1);
-                    }
-
-                    wipeSession(session);
-
-                    session.isInitiator = (roleByte == static_cast<uint8_t>(Role::INITIATOR));
-                    peerConnected = true;
-
-                    cout << "\r\033[K";
-                    cout << "PEER JOINED." << endl;
-
-                    cout << "Establishing secure connection..." << endl;
-
-                    // start the handshake
-                    makeKeyPair(session);
-                    
-                    MsgType handshake = MsgType::HANDSHAKE;
-                    vector<unsigned char> publicKey(session.pk, session.pk + crypto_kx_PUBLICKEYBYTES);
-                    if(!sendFrame(clientSocket, handshake, publicKey))
-                    {
-                        cerr << "Failed to send frame." << endl;
-                    }
-
-                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-                }
-                continue;
-            case MsgType::PEER_LEFT:
-                {
-                    lock_guard<mutex> lock(terminalMutex);
-                    cout << "\r\033[K";
-                    cerr << body << endl;
-                    cout << "WAITING FOR PEER..." << endl;
-                    peerConnected = false;
-                    wipeSession(session);
                     cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 continue;
@@ -157,7 +191,7 @@ void receiveMsg(int clientSocket, Session& session)
                     cout << "\r\033[K";
                     cerr << body << endl;
                 }
-                exit(1);
+                continue;
             case MsgType::USER_LIST:
                 {
                     lock_guard<mutex> lock(userIdsMutex);
@@ -185,7 +219,8 @@ void receiveMsg(int clientSocket, Session& session)
                 continue;
             case MsgType::USER_OFFLINE:
                 {
-                    lock_guard<mutex> lock(userIdsMutex);
+                    lock_guard<mutex> lockTerm(terminalMutex);
+                    lock_guard<mutex> lockUid(userIdsMutex);
                     PeerId id{};
                     if (body.size() != PeerId{}.size())
                     {
@@ -194,6 +229,13 @@ void receiveMsg(int clientSocket, Session& session)
                     }
                     memcpy(id.data(), body.data(), PeerId{}.size());
                     userIds.erase(id);
+                    
+                    auto it = sessions.find(id);
+                    if (it != sessions.end())
+                    {
+                        wipeSession(it->second);
+                        sessions.erase(it);
+                    }
                 }
                 continue;
             default:
@@ -204,54 +246,10 @@ void receiveMsg(int clientSocket, Session& session)
                 }
                 exit(1);
         }
-
-        if (!session.ready)
-        {
-            lock_guard<mutex> lock(terminalMutex);
-            cout << "\r\033[2K";
-            cerr << "Connection not secured." << endl;
-            cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-            continue;
-        }
-
-        // decrypt message here
-        vector<unsigned char> decryptedMessage{};
-        if(!decrypt(decryptedMessage, body, session.rx))
-        {
-            {
-                lock_guard<mutex> lock(terminalMutex);
-                cout << "\r\033[K";
-                cerr << "Failed to decrypt message." << endl;
-                cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-            }
-            continue;
-        }
-        string nameAndMessage(decryptedMessage.begin(), decryptedMessage.end());
-
-		size_t colonIdx = nameAndMessage.find(" : ");
-        if (colonIdx == string::npos)
-        {
-            {
-                lock_guard<mutex> lock(terminalMutex);
-                cout << "\r\033[K";
-                cerr << "Client sender does not have a name" << endl;
-                cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-            }
-            continue;
-        }
-		string name = nameAndMessage.substr(0, colonIdx);
-		string message = nameAndMessage.substr(colonIdx + 3);
-			
-		{
-			lock_guard<mutex> lock(terminalMutex);
-			cout << "\r\033[K";
-			cout << "\033[94m" << name << "\033[0m : " << message << endl;
-			cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-		}
     }
 }
 
-void sendMsg(int clientSocket, const string& name, Session& session)
+void sendMsg(int clientSocket, const string& name, map<PeerId, Session>& sessions, const Identity& id)
 {
     {
         lock_guard<mutex> lock(terminalMutex);
@@ -292,10 +290,10 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                     cout << "\r\033[2K";
                     // all print user ids to terminal here
                     int n = 1;
-                    for (const auto& id : userIds)
+                    for (const auto& uid : userIds)
                     { 
-                        userIdVector.push_back(id);
-                        cout << n << ") " << idFingerPrint(id.data()) << endl;
+                        userIdVector.push_back(uid);
+                        cout << n << ") " << idFingerPrint(uid.data()) << endl;
                         n++;
                     }
                     inputBuffer.clear();
@@ -339,6 +337,15 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                         {
                             cout << "\r\033[K" << "Now chatting with " << idFingerPrint(selected.data()) << endl;
                             currentPeer = selected;
+
+                            auto it = sessions.find(selected);
+                            if (it == sessions.end() || !it->second.hasKeyPair)
+                            {
+                                if (!startHandshake(clientSocket, id, selected, sessions[selected]))
+                                {
+                                    sessions.erase(selected);
+                                }
+                            }
                         }
                         
                     }
@@ -348,25 +355,23 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                     continue;                    
                 }
 
-                if (!peerConnected)
-                {
-                    cout << "\r\033[K";
-                    cout << "No one is here..." << endl;
-                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-                    continue;
-                }
-
-                if (!session.ready)
-                {
-                    cout << "\r\033[2K";
-                    cerr << "Connection not secured." << endl;
-                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
-                    continue;
-                }
 
                 if (inputBuffer.empty())
                 {
                     continue; 
+                }
+
+                if (!currentPeer)
+                {
+                    // cerr no chat selected
+                    continue;
+                }
+
+                auto it = sessions.find(*currentPeer);
+                if (it == sessions.end() || !it->second.ready)
+                {
+                    // cerr 
+                    continue;
                 }
 
                 cout << "\r\033[2K";
@@ -374,14 +379,15 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                 string message = name + " : " + inputBuffer; 
 
                 vector<unsigned char> encrypted{};
-                if (!encrypt(message, encrypted, session.tx))
+                if (!encrypt(message, encrypted, it->second.tx))
                 {
                     cerr << "Failed to encrypt" << endl;
                     cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
                     continue;
                 }
-
-                if (encrypted.size() > MAX_MESSAGE_SIZE)
+                
+                vector<unsigned char> frameBody = buildBody(*currentPeer, encrypted);
+                if (frameBody.size() + 1 > MAX_MESSAGE_SIZE)
                 {
                     cerr << "Invalid Message Length" << endl;
                     cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
@@ -389,7 +395,7 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                 }              
 
                 MsgType msg = MsgType::MESSAGE;
-                if (!sendFrame(clientSocket, msg, encrypted))
+                if (!sendFrame(clientSocket, msg, frameBody))
                 {
                     cerr << "Failed to send frame" << endl;
                     cout << "\n\033[92myou\033[0m > " << inputBuffer << flush;
@@ -566,12 +572,11 @@ int main(int argc, char* argv[])
 
     tcsetattr(STDIN_FILENO, TCSANOW, &modTerminal);
 
-    // create session
-    Session session;
+    map<PeerId, Session> sessions;
 
     // threads
-    thread threadReceive(receiveMsg, clientSocket, ref(session));
-    thread threadSend(sendMsg, clientSocket, name, ref(session));
+    thread threadReceive(receiveMsg, clientSocket, ref(sessions), id);
+    thread threadSend(sendMsg, clientSocket, name, ref(sessions), id);
 
     threadReceive.join();
     threadSend.join();
