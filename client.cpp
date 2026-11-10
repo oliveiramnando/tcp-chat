@@ -326,13 +326,21 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                     else
                     {
                         PeerId selected = userIdVector[n - 1];
-                        if (!userIds.contains(selected))
+                        bool online;
                         {
-                            // cerr user not online
-                            continue;
+                            lock_guard<mutex> lock(userIdsMutex);
+                            online = userIds.contains(selected);
                         }
-                        cout << "\r\033[K" << "Now chatting with " << idFingerPrint(selected.data()) << endl;
-                        currentPeer = selected;
+                        if (!online)
+                        {
+                            cout << "\r\033[K" << "That user is no longer online." << endl;
+                        }
+                        else
+                        {
+                            cout << "\r\033[K" << "Now chatting with " << idFingerPrint(selected.data()) << endl;
+                            currentPeer = selected;
+                        }
+                        
                     }
 
                     inputBuffer.clear();
