@@ -28,6 +28,13 @@ using ClientMap = map<PeerId, int>;     // logged in userid -> socket; instead o
 mutex clientsMutex;
 mutex coutMutex;
 
+void rejectClient(int clientSocket, const string& reason)
+{
+    vector<unsigned char> msg(reason.begin(), reason.end());
+    sendFrame(clientSocket, MsgType::ERROR_MSG, msg);
+    close(clientSocket);
+}
+
 void clientHandler(int clientSocket, ClientMap& clients)
 {
     // send challenge 
@@ -56,6 +63,7 @@ void clientHandler(int clientSocket, ClientMap& clients)
             cerr << "Client disconnected or Error receiving frame." << endl;
         }
         // reject client 
+        rejectClient(clientSocket, "Error receiving Auth.");
         return;
     }
 
@@ -71,7 +79,7 @@ void clientHandler(int clientSocket, ClientMap& clients)
     // verify
     if (crypto_sign_verify_detached(signature, message.data(), message.size(), clientId.data()) != 0)
     {
-        // reject 
+        rejectClient(clientSocket, "Error on verifying signature.");
         return;
     }
 
@@ -80,12 +88,12 @@ void clientHandler(int clientSocket, ClientMap& clients)
 
         if (clients.count(clientId) > 0)
         {
-            // reject
+            rejectClient(clientSocket, "Already logged in.");
             return;
         }
         if (clients.size() >= MAX_CLIENTS)
         {
-            // reject
+            rejectClient(clientSocket, "MAX CLIENTS REACHED.");
             return;
         }
 
@@ -140,15 +148,15 @@ void clientHandler(int clientSocket, ClientMap& clients)
 
 		{
 			lock_guard<mutex> lock(clientsMutex);
-			for (int cli: clients)
+			for (const auto & [otherId, otherSocket] : clients)
 			{
-				if (cli == clientSocket)
+				if (otherId == clientId)
 				{
 					continue;
 				}
 
 			
-				if (!sendFrame(cli, type, encryptedMessage))
+				if (!sendFrame(otherSocket, type, encryptedMessage))
 				{
 					cerr << "Failed to send message to client" << endl;
 				}
@@ -164,9 +172,9 @@ void clientHandler(int clientSocket, ClientMap& clients)
         MsgType peerLeft = MsgType::PEER_LEFT;
         string peerLeftMsg = "PEER LEFT.";
         vector<unsigned char> plMsg(peerLeftMsg.begin(), peerLeftMsg.end());
-        for (int cli: clients)
+        for (const auto & [otherId, otherSocket] : clients)
 	    {
-	    	if (!sendFrame(cli, peerLeft, plMsg))
+	    	if (!sendFrame(otherSocket, peerLeft, plMsg))
 	    	{
 	    		cerr << "Failed to send message to client" << endl;
 	    	}
@@ -244,7 +252,6 @@ int main(int argc, char* argv[])
 		return 1;
     }
 
-    // vector<int> clients;
     ClientMap clients;
 
     while (true)
