@@ -162,7 +162,8 @@ void receiveMsg(int clientSocket, Session& session)
                     lock_guard<mutex> lock(userIdsMutex);
                     if (!parseUserList(body, userIds))
                     {
-                        break;
+                        // cerr here
+                        continue;
                     }
                 }
                 continue;
@@ -171,6 +172,12 @@ void receiveMsg(int clientSocket, Session& session)
                 {
                     lock_guard<mutex> lock(userIdsMutex);
                     PeerId id{};
+                    if (body.size() != PeerId{}.size())
+                    {
+                        // print error here
+                        continue;
+                    }
+
                     memcpy(id.data(), body.data(), PeerId{}.size());
                     userIds.insert(id);
                 }
@@ -179,6 +186,11 @@ void receiveMsg(int clientSocket, Session& session)
                 {
                     lock_guard<mutex> lock(userIdsMutex);
                     PeerId id{};
+                    if (body.size() != PeerId{}.size())
+                    {
+                        // cerr
+                        continue;
+                    }
                     memcpy(id.data(), body.data(), PeerId{}.size());
                     userIds.erase(id);
                 }
@@ -247,6 +259,7 @@ void sendMsg(int clientSocket, const string& name, Session& session)
     }
 
     char ch;
+    vector<PeerId> clientsVector;
 
     while (read(STDIN_FILENO, &ch, 1) == 1)
     {
@@ -266,6 +279,22 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                     break;
                 }
 
+                // display list of user ids when prompted
+                if (inputBuffer == "/users")
+                {
+                    lock_guard<mutex> lock(userIdsMutex);
+                    cout << "\r\033[2K";
+                    // all print user ids to terminal here
+                    for (const auto& id : userIds)
+                    { 
+                        cout << idFingerPrint(id.data()) << endl;
+                    }
+                    inputBuffer.clear();
+                    cout << "\033[92myou\033[0m > " << flush;
+                    continue;
+                }
+                
+                // when certain command with user id is prompted set the recipient id that
                 if (!peerConnected)
                 {
                     cout << "\r\033[K";
