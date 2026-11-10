@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cstdint>
 #include <set>
+#include <optional>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -259,7 +260,11 @@ void sendMsg(int clientSocket, const string& name, Session& session)
     }
 
     char ch;
-    vector<PeerId> clientsVector;
+
+    const string chatCMD = "/chat ";
+
+    vector<PeerId> userIdVector;
+    optional<PeerId> currentPeer;
 
     while (read(STDIN_FILENO, &ch, 1) == 1)
     {
@@ -282,12 +287,16 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                 // display list of user ids when prompted
                 if (inputBuffer == "/users")
                 {
+                    userIdVector.clear();
                     lock_guard<mutex> lock(userIdsMutex);
                     cout << "\r\033[2K";
                     // all print user ids to terminal here
+                    int n = 1;
                     for (const auto& id : userIds)
                     { 
-                        cout << idFingerPrint(id.data()) << endl;
+                        userIdVector.push_back(id);
+                        cout << n << ") " << idFingerPrint(id.data()) << endl;
+                        n++;
                     }
                     inputBuffer.clear();
                     cout << "\033[92myou\033[0m > " << flush;
@@ -295,6 +304,42 @@ void sendMsg(int clientSocket, const string& name, Session& session)
                 }
                 
                 // when certain command with user id is prompted set the recipient id that
+                if (inputBuffer.rfind(chatCMD, 0) == 0)
+                {
+                    string arg = inputBuffer.substr(chatCMD.size());
+
+                    size_t n = 0;
+                    try
+                    {
+                        n = stoul(arg);
+                    }
+                    catch(const exception&)
+                    {
+                        n = 0;
+                    }
+                    
+
+                    if (n < 1 || n > userIdVector.size())
+                    {
+                        cout << "\r\033[K" << "No such user. Type /users to see the list." << endl;
+                    }
+                    else
+                    {
+                        PeerId selected = userIdVector[n - 1];
+                        if (!userIds.contains(selected))
+                        {
+                            // cerr user not online
+                            continue;
+                        }
+                        cout << "\r\033[K" << "Now chatting with " << idFingerPrint(selected.data()) << endl;
+                        currentPeer = selected;
+                    }
+
+                    inputBuffer.clear();
+                    cout << "\033[92myou\033[0m > " << flush;
+                    continue;                    
+                }
+
                 if (!peerConnected)
                 {
                     cout << "\r\033[K";
@@ -502,7 +547,7 @@ int main(int argc, char* argv[])
 
     cout << endl;
 
-    cout << "WAITING FOR PEER.." << endl;
+    cout << "Type /users to see who's online..." << endl;
 
     // set terminal to raw mode
     tcgetattr(STDIN_FILENO, &origTerminal);
