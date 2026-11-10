@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstring>
 #include <cstdint>
+#include <set>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -28,10 +29,12 @@ using namespace std;
 
 string inputBuffer;
 mutex terminalMutex;
+mutex userIdsMutex;
 termios origTerminal{};
 atomic<bool> quitting = false;
 atomic<bool> peerConnected = false;
 
+set<PeerId> userIds;
 
 void restoreTerminal()
 {
@@ -154,6 +157,32 @@ void receiveMsg(int clientSocket, Session& session)
                     cerr << body << endl;
                 }
                 exit(1);
+            case MsgType::USER_LIST:
+                {
+                    lock_guard<mutex> lock(userIdsMutex);
+                    if (!parseUserList(body, userIds))
+                    {
+                        break;
+                    }
+                }
+                continue;
+            case MsgType::USER_ONLINE:
+                // convert body into peer id and push back to vector
+                {
+                    lock_guard<mutex> lock(userIdsMutex);
+                    PeerId id{};
+                    memcpy(id.data(), body.data(), PeerId{}.size());
+                    userIds.insert(id);
+                }
+                continue;
+            case MsgType::USER_OFFLINE:
+                {
+                    lock_guard<mutex> lock(userIdsMutex);
+                    PeerId id{};
+                    memcpy(id.data(), body.data(), PeerId{}.size());
+                    userIds.erase(id);
+                }
+                continue;
             default:
                 {
                     lock_guard<mutex> lock(terminalMutex);
