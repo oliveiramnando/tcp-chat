@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstdint>
 #include <array>
+#include <set>
 
 constexpr std::size_t MAX_MESSAGE_SIZE = 8192;
 constexpr std::size_t CHALLENGE_BYTES = 32;
@@ -35,15 +36,14 @@ enum class Role : uint8_t {
 std::vector<unsigned char> buildLoginMessage(const std::array<unsigned char, CHALLENGE_BYTES>& challenge);
 
 bool readNBytes(int clientSocket, char* buffer, size_t n);
-
 bool sendAll(int clientSocket, const char* buffer, size_t n);
 
-bool parseBody(const std::string& body, PeerId& id, std::vector<unsigned char>& payload);
+bool parseUserList(const std::string& payload, std::set<PeerId>& ids);
 
+bool parseBody(const std::string& body, PeerId& id, std::vector<unsigned char>& payload);
 std::vector<unsigned char> buildBody(const PeerId& id, const std::vector<unsigned char>& payload);
 
 bool receiveFrame(int clientSocket, MsgType& type, std::string& body);
-
 bool sendFrame(int clientSocket, MsgType type, const std::vector<unsigned char>& body);
 
 #endif

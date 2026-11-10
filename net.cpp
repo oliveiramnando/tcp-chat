@@ -7,6 +7,7 @@
 #include <iostream>
 #include <cstdint>
 #include <array>
+#include <set>
 
 using namespace std;
 
@@ -55,6 +56,26 @@ bool sendAll(int clientSocket, const char* buffer, size_t n)
     return true;
 }
 
+bool parseUserList(const string& payload, set<PeerId>& ids)
+{
+    const size_t idSize = PeerId{}.size();
+    if (payload.size() % idSize != 0)
+    {
+        return false;
+    }
+
+    ids.clear();
+
+    for (size_t offset = 0; offset < payload.size(); offset += idSize)
+    {
+        PeerId id{};
+        memcpy(id.data(), payload.data() + offset, idSize);
+        ids.insert(id);
+    }
+
+    return true;
+}
+
 bool parseBody(const string& body, PeerId& id, vector<unsigned char>& payload)
 {
     if (body.size() < id.size())
@@ -81,7 +102,6 @@ vector<unsigned char> buildBody(const PeerId& id, const vector<unsigned char>& p
 
 bool receiveFrame(int clientSocket, MsgType& type, string& body)
 {
-    // [length][type][ID][body]
     // read 4 bytes for length
     char lengthBytes[sizeof(uint32_t)] = {}; 
     if (!readNBytes(clientSocket, lengthBytes, sizeof(uint32_t)))
@@ -118,7 +138,6 @@ bool receiveFrame(int clientSocket, MsgType& type, string& body)
 
 bool sendFrame(int clientSocket, MsgType type, const vector<unsigned char>& body)
 {
-    // [length][type][ID][body]
     const uint8_t typeByte = static_cast<uint8_t>(type);
 
     const uint32_t bodyLength = static_cast<uint32_t>(sizeof(typeByte) + body.size());
