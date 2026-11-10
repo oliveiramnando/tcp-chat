@@ -35,6 +35,20 @@ void rejectClient(int clientSocket, const string& reason)
     close(clientSocket);
 }
 
+bool sendUserList(int clientSocket, const PeerId& selfId, const ClientMap& inputMap)
+{
+    vector<unsigned char> payload;
+    payload.reserve(inputMap.size() * 32);
+    for (auto& cli : inputMap) 
+    {   
+        if (cli.first == selfId) { continue; }
+        payload.insert(payload.end(), cli.first.begin(), cli.first.end());
+    }
+
+    return sendFrame(clientSocket, MsgType::USER_LIST, payload);
+}
+
+
 void clientHandler(int clientSocket, ClientMap& clients)
 {
     // send challenge 
@@ -91,11 +105,6 @@ void clientHandler(int clientSocket, ClientMap& clients)
             rejectClient(clientSocket, "Already logged in.");
             return;
         }
-        if (clients.size() >= MAX_CLIENTS)
-        {
-            rejectClient(clientSocket, "MAX CLIENTS REACHED.");
-            return;
-        }
 
         if (!sendFrame(clientSocket, MsgType::AUTH_OK, {}))
         {
@@ -104,16 +113,24 @@ void clientHandler(int clientSocket, ClientMap& clients)
         }
 
         clients[clientId] = clientSocket;
-
-        if (clients.size() == MAX_CLIENTS)
-        {
-            for (const auto& [otherId, otherSocket] : clients)
-            {
-                if (otherId == clientId) { continue; }
-                sendFrame(otherSocket,  MsgType::PEER_JOINED, {static_cast<unsigned char>(Role::INITIATOR)});
-                sendFrame(clientSocket, MsgType::PEER_JOINED, {static_cast<unsigned char>(Role::RESPONDER)});
-            }
+        // send user list of all clients
+        if (!sendUserList(clientSocket, clientId, clients))
+        {   
+            return;
         }
+
+        // send every other user that the curr user is online 
+        string clientIdString(reinterpret_cast<const char*>(clientId.data()));
+        string onlineMsg = "USER ONLINE [" + clientIdString +"].";
+        vector<unsigned char> olMsg(onlineMsg.begin(), onlineMsg.end());
+        for (const auto & [otherId, otherSocket] : clients)
+	    {
+            if (otherId == clientId) { continue; }
+	    	if (!sendFrame(otherSocket, MsgType::USER_ONLINE, olMsg))
+	    	{
+	    		cerr << "Failed to send message to client" << endl;
+	    	}
+	    }
     }
 
     {
@@ -124,8 +141,8 @@ void clientHandler(int clientSocket, ClientMap& clients)
     while (true)
     {
 		MsgType type;
-        string encrypted{};
-        if(!receiveFrame(clientSocket, type, encrypted))
+        string payload{};
+        if(!receiveFrame(clientSocket, type, payload))
         {
             {
                 lock_guard<mutex> lock(coutMutex);
@@ -140,41 +157,41 @@ void clientHandler(int clientSocket, ClientMap& clients)
             break;
         }
 
+        // parse body, get the recipient and payload (in this case encrypted) sub the 
+        vector<unsigned char> encrypted;
+        PeerId recipientId;
+        if (!parseBody(payload, recipientId, encrypted))
+        {
+            break;
+        }
+
         //  convert encryptedMessage into uvector<Char>
         const vector<unsigned char> encryptedMessage(encrypted.begin(), encrypted.end()); 
 
 		// print bytes relayted
-		cout << "[Relayed " << encryptedMessage.size() << " bytes]" << endl; 
+		cout << "[Relayed " << encryptedMessage.size() << " bytes]" << endl;
+        
+        vector<unsigned char> sendBody = buildBody(clientId, encryptedMessage);
 
-		{
-			lock_guard<mutex> lock(clientsMutex);
-			for (const auto & [otherId, otherSocket] : clients)
-			{
-				if (otherId == clientId)
-				{
-					continue;
-				}
-
-			
-				if (!sendFrame(otherSocket, type, encryptedMessage))
-				{
-					cerr << "Failed to send message to client" << endl;
-				}
-			}
-		}
+        int recipientSocket = clients[recipientId];
+        
+        if (!sendFrame(recipientSocket, type, sendBody))
+        {
+            cerr << "Failed to send message to client" << endl;
+        }
     }
 
 	{
 		lock_guard<mutex> lock(clientsMutex);
 		clients.erase(clientId);
 
-        // send peer left to remaining clients
-        MsgType peerLeft = MsgType::PEER_LEFT;
-        string peerLeftMsg = "PEER LEFT.";
-        vector<unsigned char> plMsg(peerLeftMsg.begin(), peerLeftMsg.end());
+        // send USER OFFLINE to remaining clients
+        string clientIdString(reinterpret_cast<const char*>(clientId.data()));
+        string uoff = "USER OFFLINE [" + clientIdString + "].";
+        vector<unsigned char> offMsg(uoff.begin(), uoff.end());
         for (const auto & [otherId, otherSocket] : clients)
 	    {
-	    	if (!sendFrame(otherSocket, peerLeft, plMsg))
+	    	if (!sendFrame(otherSocket, MsgType::USER_OFFLINE, offMsg))
 	    	{
 	    		cerr << "Failed to send message to client" << endl;
 	    	}
