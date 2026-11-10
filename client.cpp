@@ -93,7 +93,8 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
                     vector<unsigned char> payload;
                     if (!parseBody(body, sender, payload))
                     {
-                        // cerr here
+                        cerr << "Malformed MESSAGE received." << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                         continue;
                     }
 
@@ -101,7 +102,8 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
                     auto it = sessions.find(sender);
                     if (it == sessions.end() || !it->second.ready)
                     {
-                        // cerr
+                        cerr << "Message from unknown or unsecured peer rejected." << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                         continue;
                     }
 
@@ -142,7 +144,8 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
                     vector<unsigned char> payload;
                     if (!parseBody(body, sender, payload))
                     {
-                        // cerr here
+                        cerr << "Malformed HANDSHAKE received." << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                         continue;
                     }
 
@@ -156,14 +159,12 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
                     {
                         if (!startHandshake(clientSocket, id, sender, s))
                         {
-                            // cerr
+                            cerr << "Failed to send HANDSHAKE reply." << endl;
                             sessions.erase(sender);
+                            cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                             continue;
                         }
                     }
-
-                    cout << "HANDSHAKE RECEIVED" << endl;
-
 
                     if (!deriveSessionKeys(s, string(payload.begin(), payload.end())))
                     {
@@ -190,16 +191,20 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
                     lock_guard<mutex> lock(terminalMutex);
                     cout << "\r\033[K";
                     cerr << body << endl;
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 continue;
             case MsgType::USER_LIST:
                 {
-                    lock_guard<mutex> lock(userIdsMutex);
+                    lock_guard<mutex> lockTerm(terminalMutex);
+                    lock_guard<mutex> lockUid(userIdsMutex);
                     if (!parseUserList(body, userIds))
                     {
-                        // cerr here
+                        cerr << "Failed to parse list of online users." << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                         continue;
                     }
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                 }
                 continue;
             case MsgType::USER_ONLINE:
@@ -338,6 +343,8 @@ void sendMsg(int clientSocket, const string& name, map<PeerId, Session>& session
                             cout << "\r\033[K" << "Now chatting with " << idFingerPrint(selected.data()) << endl;
                             currentPeer = selected;
 
+                            cout << "Establishing secure connection..." << endl;
+
                             auto it = sessions.find(selected);
                             if (it == sessions.end() || !it->second.hasKeyPair)
                             {
@@ -363,14 +370,18 @@ void sendMsg(int clientSocket, const string& name, map<PeerId, Session>& session
 
                 if (!currentPeer)
                 {
-                    // cerr no chat selected
+                    cout << "\r\033[K";
+                    cerr << "No chat selected. Type /users, then /chat <n>." << endl;
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                     continue;
                 }
 
                 auto it = sessions.find(*currentPeer);
                 if (it == sessions.end() || !it->second.ready)
                 {
-                    // cerr 
+                    cout << "\r\033[K";
+                    cerr << "Connection not secured yet. Wait for the fingerprint." << endl;
+                    cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                     continue;
                 }
 
@@ -575,11 +586,13 @@ int main(int argc, char* argv[])
     map<PeerId, Session> sessions;
 
     // threads
-    thread threadReceive(receiveMsg, clientSocket, ref(sessions), id);
-    thread threadSend(sendMsg, clientSocket, name, ref(sessions), id);
+    thread threadReceive(receiveMsg, clientSocket, ref(sessions), cref(id));
+    thread threadSend(sendMsg, clientSocket, name, ref(sessions), cref(id));
 
     threadReceive.join();
     threadSend.join();
+
+    sodium_memzero(id.sk, sizeof(id.sk));
 
     // restore terminal settings
     restoreTerminal();
