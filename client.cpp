@@ -29,6 +29,7 @@
 
 #include "net.hpp"
 #include "crypto.hpp"
+#include "util.hpp"
 
 using namespace std;
 
@@ -43,22 +44,6 @@ set<PeerId> userIds;
 void restoreTerminal()
 {
     tcsetattr(STDIN_FILENO, TCSANOW, &origTerminal);
-}
-
-bool isValidProfileName(const string& name)
-{
-    if (name.empty() || name.size() > 32)
-    {
-        return false;
-    }
-    for (char c : name)
-    {
-        if (!isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_')
-        {
-            return false;
-        }
-    }
-    return true;
 }
 
 bool prepareProfileDir(const string& profile, string& dir)

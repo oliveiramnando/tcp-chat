@@ -10,11 +10,11 @@ all: server client
 server: server.cpp net.cpp net.hpp crypto.cpp crypto.hpp
 	$(CXX) $(CXXFLAGS) server.cpp net.cpp crypto.cpp -o server $(LDLIBS)
 
-client: client.cpp net.cpp net.hpp crypto.cpp crypto.hpp
-	$(CXX) $(CXXFLAGS) client.cpp net.cpp crypto.cpp -o client $(LDLIBS)
+client: client.cpp net.cpp net.hpp crypto.cpp crypto.hpp util.cpp util.hpp
+	$(CXX) $(CXXFLAGS) client.cpp net.cpp crypto.cpp util.cpp -o client $(LDLIBS)
 
-run_tests: $(TEST_SRCS) net.cpp net.hpp crypto.cpp crypto.hpp
-	$(CXX) $(TEST_FLAGS) $(TEST_SRCS) net.cpp crypto.cpp -o run_tests $(LDLIBS)
+run_tests: $(TEST_SRCS) net.cpp net.hpp crypto.cpp crypto.hpp util.cpp util.hpp
+	$(CXX) $(TEST_FLAGS) $(TEST_SRCS) net.cpp crypto.cpp util.cpp -o run_tests $(LDLIBS)
 
 test: run_tests
 	./run_tests
