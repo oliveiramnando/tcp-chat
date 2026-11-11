@@ -53,9 +53,20 @@ bool startHandshake(int sock, const Identity& me, const PeerId& peer, Session& s
     s.isInitiator = amInitiator(me, peer);
     makeKeyPair(s);
 
-    vector<unsigned char> publicKey(s.pk, s.pk + crypto_kx_PUBLICKEYBYTES);
-    vector<unsigned char> payload = buildBody(peer, publicKey);
-    if(!sendFrame(sock, MsgType::HANDSHAKE, payload))
+    // vector<unsigned char> publicKey(s.pk, s.pk + crypto_kx_PUBLICKEYBYTES);
+    // vector<unsigned char> payload = buildBody(peer, publicKey);
+
+    unsigned char sig[crypto_sign_BYTES];
+    if (!signHandshake(me, peer.data(), s.pk, sig))
+    {
+        return false;
+    }
+    vector<unsigned char> handshakePayload(s.pk, s.pk + crypto_kx_PUBLICKEYBYTES);  // eph key
+    handshakePayload.insert(handshakePayload.end(), sig, sig + crypto_sign_BYTES);   // [eph pk][sig]
+
+    vector<unsigned char> body = buildBody(peer, handshakePayload);
+
+    if(!sendFrame(sock, MsgType::HANDSHAKE, body))
     {
         return false;
     }
