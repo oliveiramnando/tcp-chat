@@ -1,4 +1,5 @@
 # TCP Chat
+![CI](https://github.com/oliveiramnando/tcp-chat/actions/workflows/ci.yml/badge.svg)
 
 A terminal-based, end-to-end encrypted TCP chat application written in **C++20**. Clients log in to a multithreaded relay server with a long-term **Ed25519** identity key, see who is online, and open private one-to-one conversations. Each conversation uses its own ephemeral **X25519** key exchange, signed with both users' identity keys, and **XChaCha20-Poly1305** authenticated encryption via [libsodium](https://doc.libsodium.org/).
 
