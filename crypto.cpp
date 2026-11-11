@@ -102,10 +102,15 @@ vector<unsigned char> buildHandshakeMessage(const unsigned char* senderPk, const
     return msg;
 }
 
+bool signHandshake(const Identity& me, const unsigned char* recipientPk, const unsigned char* ephPk, unsigned char sig[crypto_sign_BYTES])
+{
+    vector<unsigned char> handshakeMsg = buildHandshakeMessage(me.pk, recipientPk, ephPk);
+    return crypto_sign_detached(sig, nullptr, handshakeMsg.data(), handshakeMsg.size(), me.sk) == 0;
+}
+
 bool signLogin(const Identity& id, const array<unsigned char, CHALLENGE_BYTES>& challenge, unsigned char signature[crypto_sign_BYTES])
 {
     vector<unsigned char> message = buildLoginMessage(challenge);
-
     return crypto_sign_detached(signature, nullptr, message.data(), message.size(), id.sk) == 0;
 }
 
