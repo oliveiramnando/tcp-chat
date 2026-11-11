@@ -114,6 +114,8 @@ void clientHandler(int clientSocket, ClientMap& clients)
         // send user list of all clients
         if (!sendUserList(clientSocket, clientId, clients))
         {   
+            clients.erase(clientId);
+            close(clientSocket);
             return;
         }
 
@@ -124,6 +126,7 @@ void clientHandler(int clientSocket, ClientMap& clients)
             if (otherId == clientId) { continue; }
 	    	if (!sendFrame(otherSocket, MsgType::USER_ONLINE, idPayload))
 	    	{
+                lock_guard<mutex> lock(coutMutex);
 	    		cerr << "Failed to send message to client" << endl;
 	    	}
 	    }
@@ -160,14 +163,15 @@ void clientHandler(int clientSocket, ClientMap& clients)
         {
             break;
         }
-
-        //  convert encryptedMessage into uvector<Char>
-        const vector<unsigned char> encryptedMessage(encrypted.begin(), encrypted.end()); 
+        // const vector<unsigned char> encryptedMessage(encrypted.begin(), encrypted.end()); 
 
 		// print bytes relayted
-		cout << "[Relayed " << encryptedMessage.size() << " bytes]" << endl;
+        {
+            lock_guard<mutex> lock(coutMutex);
+            cout << "[Relayed " << encrypted.size() << " bytes]" << endl;
+        }
         
-        vector<unsigned char> sendBody = buildBody(clientId, encryptedMessage);
+        vector<unsigned char> sendBody = buildBody(clientId, encrypted);
 
         int recipientSocket = -1;
         {
@@ -205,13 +209,17 @@ void clientHandler(int clientSocket, ClientMap& clients)
 	    {
 	    	if (!sendFrame(otherSocket, MsgType::USER_OFFLINE, idPayload))
 	    	{
+                lock_guard<mutex> lock(coutMutex);
 	    		cerr << "Failed to send message to client" << endl;
 	    	}
 	    }
 	}
 
 	close(clientSocket);
-	cout << "Client disconnected" << endl;
+    {
+        lock_guard<mutex> lock(coutMutex);
+        cout << "Client disconnected" << endl;
+    }
 }
 
 int main(int argc, char* argv[])
@@ -275,7 +283,7 @@ int main(int argc, char* argv[])
     cout << "Socket bound to address" << endl;
 
     // listen for incoming connections
-    if (listen(serverSocket, 2) < 0)
+    if (listen(serverSocket, SOMAXCONN) < 0)
     {
 		perror("Failed to listen for incoming connections");
 		return 1;
