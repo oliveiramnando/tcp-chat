@@ -24,6 +24,9 @@
 
 #include <sodium.h>
 
+#include <filesystem>
+#include <cctype>
+
 #include "net.hpp"
 #include "crypto.hpp"
 
@@ -40,6 +43,37 @@ set<PeerId> userIds;
 void restoreTerminal()
 {
     tcsetattr(STDIN_FILENO, TCSANOW, &origTerminal);
+}
+
+bool isValidProfileName(const string& name)
+{
+    if (name.empty() || name.size() > 32)
+    {
+        return false;
+    }
+    for (char c : name)
+    {
+        if (!isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_')
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool prepareProfileDir(const string& profile, string& dir)
+{
+    dir = "profiles/" + profile;
+
+    error_code ec;
+    filesystem::create_directories(dir, ec);
+    if (ec)
+    {
+        return false;
+    }
+
+    filesystem::permissions(dir, filesystem::perms::owner_all, filesystem::perm_options::replace, ec);
+    return !ec;
 }
 
 bool amInitiator(const Identity& me, const PeerId& peer)
@@ -482,8 +516,29 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    string profile = "default";
+    if (argc > 3)
+    {
+        profile = argv[3];
+    }
+
+    if (!isValidProfileName(profile))
+    {
+        cerr << "Invalid profile name. Use 1-32 letters, digits, '-' or '_'." << endl;
+        return 1;
+    }
+
+    string profileDir;
+    if (!prepareProfileDir(profile, profileDir))
+    {
+        cerr << "Failed to create profile folder: profiles/" << profile << endl;
+        return 1;
+    }
+
+    cout << "Profile: " << profile << endl;
+
     Identity id;
-    if (!loadOrCreateIdentity("identity.key", id))
+    if (!loadOrCreateIdentity(profileDir + "/identity.key", id))
     {
         cerr << "Failed to load identity." << endl;
         return 1;
