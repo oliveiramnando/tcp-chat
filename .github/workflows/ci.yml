@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  linux:
+    name: Ubuntu (g++)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install libsodium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsodium-dev
+
+      - name: Build (warnings are errors)
+        run: make CXXFLAGS="-std=c++20 -Wall -Wextra -Werror -g -Isrc"
+
+      - name: Run unit tests (ASan + UBSan)
+        run: make test
+
+  macos:
+    name: macOS (clang)
+    runs-on: macos-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install libsodium
+        run: brew install libsodium
+
+      - name: Build and run unit tests
+        run: |
+          SODIUM="$(brew --prefix libsodium)"
+          make all test \
+            CXXFLAGS="-std=c++20 -Wall -Wextra -g -Isrc -I$SODIUM/include" \
+            LDLIBS="-L$SODIUM/lib -lsodium"

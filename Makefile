@@ -6,7 +6,7 @@ LDLIBS   = -lsodium
 COMMON_SRCS = src/net.cpp src/crypto.cpp
 COMMON_HDRS = src/net.hpp src/crypto.hpp
 
-TEST_FLAGS = $(CXXFLAGS) -fsanitize=address,undefined
+TEST_FLAGS = $(CXXFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all
 TEST_SRCS  = $(wildcard tests/test_*.cpp)
 
 all: server client
