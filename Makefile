@@ -20,7 +20,7 @@ client: src/client.cpp src/util.cpp src/util.hpp $(COMMON_SRCS) $(COMMON_HDRS)
 run_tests: $(TEST_SRCS) src/util.cpp src/util.hpp $(COMMON_SRCS) $(COMMON_HDRS)
 	$(CXX) $(TEST_FLAGS) $(TEST_SRCS) src/util.cpp $(COMMON_SRCS) -o run_tests $(LDLIBS)
 
-test: run_tests
+test: run_tests server
 	./run_tests
 
 clean:
