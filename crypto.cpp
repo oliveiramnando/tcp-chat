@@ -86,6 +86,22 @@ bool loadOrCreateIdentity(const string& path, Identity& id)
     return true;
 }
 
+vector<unsigned char> buildHandshakeMessage(const unsigned char* senderPk, const unsigned char* recipientPk, const unsigned char* ephPk)
+{
+    // build signed message: "tcpchat-handshake-v1" || sender ID || recipient ID || ephemeral pk
+    constexpr size_t LABEL_LEN = sizeof(HANDSHAKE_LABEL) - 1;
+    constexpr size_t KEY_LEN = crypto_kx_PUBLICKEYBYTES;     // 32
+
+    vector<unsigned char> msg(LABEL_LEN + KEY_LEN*3);
+
+    memcpy(msg.data(), HANDSHAKE_LABEL, LABEL_LEN);
+    memcpy(msg.data() + LABEL_LEN, senderPk, KEY_LEN);
+    memcpy(msg.data() + LABEL_LEN + KEY_LEN, recipientPk, KEY_LEN);
+    memcpy(msg.data() + LABEL_LEN + KEY_LEN*2, ephPk, KEY_LEN);
+
+    return msg;
+}
+
 bool signLogin(const Identity& id, const array<unsigned char, CHALLENGE_BYTES>& challenge, unsigned char signature[crypto_sign_BYTES])
 {
     vector<unsigned char> message = buildLoginMessage(challenge);

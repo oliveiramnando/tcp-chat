@@ -7,7 +7,9 @@
 #include <sodium.h>
 #include <string>
 
-#include"net.hpp"
+#include "net.hpp"
+
+constexpr std::size_t PAYLOAD_SIZE = crypto_kx_PUBLICKEYBYTES + crypto_sign_BYTES;  // 96 
 
 struct Identity
 {
@@ -31,6 +33,8 @@ struct Session
 };
 
 bool loadOrCreateIdentity(const std::string& path, Identity& id);
+
+std::vector<unsigned char> buildHandshakeMessage(const unsigned char* senderPk, const unsigned char* recipientPk, const unsigned char* ephPk);
 
 bool signLogin(const Identity& id, const std::array<unsigned char, CHALLENGE_BYTES>& challenge, unsigned char signature[crypto_sign_BYTES]);
 
