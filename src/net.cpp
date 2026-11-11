@@ -152,7 +152,10 @@ bool sendFrame(int clientSocket, MsgType type, const vector<unsigned char>& body
     memcpy(sendBuffer.data() + sizeof(networkLength), &typeByte, sizeof(typeByte));
 
     // [body]
-    memcpy(sendBuffer.data() + sizeof(networkLength) + sizeof(uint8_t), body.data(), body.size());
+    if (!body.empty())
+    {
+        memcpy(sendBuffer.data() + sizeof(networkLength) + sizeof(uint8_t), body.data(), body.size());
+    }
 
     if (!sendAll(clientSocket, sendBuffer.data(), sendBuffer.size()))
     {
