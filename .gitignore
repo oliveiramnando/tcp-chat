@@ -3,3 +3,4 @@ build/
 
 identity.key
 *.dSYM
+profiles/
