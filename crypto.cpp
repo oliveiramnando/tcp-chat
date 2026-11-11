@@ -108,7 +108,7 @@ bool signHandshake(const Identity& me, const unsigned char* recipientPk, const u
     return crypto_sign_detached(sig, nullptr, handshakeMsg.data(), handshakeMsg.size(), me.sk) == 0;
 }
 
-bool verifyHandshake(const unsigned char* senderPk, const unsigned char* recipientPk, const unsigned char* ephPk, unsigned char* sig)
+bool verifyHandshake(const unsigned char* senderPk, const unsigned char* recipientPk, const unsigned char* ephPk, const unsigned char* sig)
 {
     vector<unsigned char> handshakeMsg = buildHandshakeMessage(senderPk, recipientPk, ephPk);
     return crypto_sign_verify_detached(sig, handshakeMsg.data(), handshakeMsg.size(), senderPk) == 0;

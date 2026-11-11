@@ -9,7 +9,7 @@
 
 #include "net.hpp"
 
-constexpr std::size_t PAYLOAD_SIZE = crypto_kx_PUBLICKEYBYTES + crypto_sign_BYTES;  // 96 
+constexpr std::size_t HANDSHAKE_PAYLOAD_SIZE = crypto_kx_PUBLICKEYBYTES + crypto_sign_BYTES;  // 96 
 
 struct Identity
 {
@@ -36,7 +36,7 @@ bool loadOrCreateIdentity(const std::string& path, Identity& id);
 
 std::vector<unsigned char> buildHandshakeMessage(const unsigned char* senderPk, const unsigned char* recipientPk, const unsigned char* ephPk);
 bool signHandshake(const Identity& me, const unsigned char* recipientPk, const unsigned char* ephPk, unsigned char sig[crypto_sign_BYTES]);
-bool verifyHandshake(const unsigned char* senderPk, const unsigned char* recipientPk, const unsigned char* ephPk, unsigned char* sig);
+bool verifyHandshake(const unsigned char* senderPk, const unsigned char* recipientPk, const unsigned char* ephPk, const unsigned char* sig);
 
 bool signLogin(const Identity& id, const std::array<unsigned char, CHALLENGE_BYTES>& challenge, unsigned char signature[crypto_sign_BYTES]);
 
