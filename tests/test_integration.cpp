@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <spawn.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -18,6 +19,8 @@
 #include <array>
 #include <chrono>
 #include <csignal>
+#include <fstream>
+#include <sstream>
 #include <cstring>
 #include <set>
 #include <string>
@@ -25,6 +28,8 @@
 #include <vector>
 
 using namespace std;
+
+extern char** environ;   // the current environment, passed on to ./server
 
 namespace
 {
@@ -74,6 +79,7 @@ int connectTo(int port)
 // ---------- the server under test ----------
 
 // Starts ./server on a free port and stops it when the object goes out of scope.
+// The server's output goes to server_test.log, which is shown if it fails to start.
 class ServerProcess
 {
 public:
@@ -81,27 +87,37 @@ public:
     {
         signal(SIGPIPE, SIG_IGN);   // writing to a socket the server closed must not kill the tests
 
-        pid = fork();
-        if (pid == 0)
-        {
-            // Child: hide the server's own output, then become ./server.
-            int devNull = open("/dev/null", O_WRONLY);
-            dup2(devNull, STDOUT_FILENO);
-            dup2(devNull, STDERR_FILENO);
+        // posix_spawn starts ./server directly, without running any of our code in a
+        // forked copy of this process first (which is unreliable under sanitizers on macOS).
+        string portArg = to_string(port);
+        char* argv[] = {const_cast<char*>("./server"), portArg.data(), nullptr};
 
-            string portArg = to_string(port);
-            execl("./server", "./server", portArg.c_str(), static_cast<char*>(nullptr));
-            _exit(127);   // only reached if ./server could not be started
+        posix_spawn_file_actions_t actions;
+        posix_spawn_file_actions_init(&actions);
+        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, LOG_PATH,
+                                         O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO);
+
+        spawnError = posix_spawn(&pid, "./server", &actions, nullptr, argv, environ);
+        posix_spawn_file_actions_destroy(&actions);
+        if (spawnError != 0)
+        {
+            pid = -1;
+            return;
         }
 
-        // Parent: wait until the server accepts connections (up to 3 seconds).
-        for (int attempt = 0; attempt < 60 && !ready; ++attempt)
+        // Wait until the server accepts connections (up to 10 seconds).
+        for (int attempt = 0; attempt < 200 && !ready; ++attempt)
         {
             int probe = connectTo(port);
             if (probe >= 0)
             {
                 close(probe);
                 ready = true;
+            }
+            else if (!alive())
+            {
+                break;              // it already exited: no point waiting
             }
             else
             {
@@ -112,7 +128,7 @@ public:
 
     ~ServerProcess()
     {
-        if (pid > 0)
+        if (pid > 0 && !exited)
         {
             kill(pid, SIGTERM);
             waitpid(pid, nullptr, 0);
@@ -120,18 +136,63 @@ public:
     }
 
     // True while the server process is still running (it has not crashed).
-    bool alive() const
+    bool alive()
     {
-        int status = 0;
-        return waitpid(pid, &status, WNOHANG) == 0;
+        if (pid <= 0 || exited)
+        {
+            return false;
+        }
+        if (waitpid(pid, &exitStatus, WNOHANG) == pid)
+        {
+            exited = true;
+            return false;
+        }
+        return true;
+    }
+
+    // Explains why the server is not ready, for the test failure message.
+    string diagnosis()
+    {
+        ostringstream out;
+        if (spawnError != 0)
+        {
+            out << "could not start ./server: " << strerror(spawnError)
+                << " (run 'make server' first)";
+            return out.str();
+        }
+
+        alive();   // refresh the exit status
+        if (exited && WIFEXITED(exitStatus))
+        {
+            out << "./server exited with code " << WEXITSTATUS(exitStatus);
+        }
+        else if (exited && WIFSIGNALED(exitStatus))
+        {
+            out << "./server was killed by signal " << WTERMSIG(exitStatus);
+        }
+        else
+        {
+            out << "./server is running but did not accept connections on port " << port;
+        }
+
+        ifstream log(LOG_PATH);
+        out << "\n--- " << LOG_PATH << " ---\n" << log.rdbuf();
+        return out.str();
     }
 
     ServerProcess(const ServerProcess&) = delete;
     ServerProcess& operator=(const ServerProcess&) = delete;
 
+    static constexpr const char* LOG_PATH = "server_test.log";
+
     int port;
     pid_t pid = -1;
     bool ready = false;
+
+private:
+    int spawnError = 0;
+    int exitStatus = 0;
+    bool exited = false;
 };
 
 // ---------- a headless client ----------
@@ -319,7 +380,7 @@ string receiveMessage(const TestClient& me, const PeerId& expectedSender, const 
 TEST_CASE("integration: login, presence, signed handshake and private messages")
 {
     ServerProcess server;
-    REQUIRE_MESSAGE(server.ready, "./server did not start. Run 'make server' first.");
+    REQUIRE_MESSAGE(server.ready, server.diagnosis());
 
     TestClient alice, bob, carol;
 
@@ -370,7 +431,7 @@ TEST_CASE("integration: login, presence, signed handshake and private messages")
 TEST_CASE("integration: login with a bad signature or a duplicate identity is rejected")
 {
     ServerProcess server;
-    REQUIRE_MESSAGE(server.ready, "./server did not start. Run 'make server' first.");
+    REQUIRE_MESSAGE(server.ready, server.diagnosis());
 
     SUBCASE("bad signature")
     {
@@ -430,7 +491,7 @@ TEST_CASE("integration: login with a bad signature or a duplicate identity is re
 TEST_CASE("integration: sending to an offline user returns that user's ID")
 {
     ServerProcess server;
-    REQUIRE_MESSAGE(server.ready, "./server did not start. Run 'make server' first.");
+    REQUIRE_MESSAGE(server.ready, server.diagnosis());
 
     TestClient alice;
     login(alice, server.port);
@@ -452,7 +513,7 @@ TEST_CASE("integration: sending to an offline user returns that user's ID")
 TEST_CASE("integration: malformed frames close that connection but not the server")
 {
     ServerProcess server;
-    REQUIRE_MESSAGE(server.ready, "./server did not start. Run 'make server' first.");
+    REQUIRE_MESSAGE(server.ready, server.diagnosis());
 
     TestClient bob;                     // a well-behaved user who should never be affected
     login(bob, server.port);
