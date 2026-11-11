@@ -53,16 +53,13 @@ bool startHandshake(int sock, const Identity& me, const PeerId& peer, Session& s
     s.isInitiator = amInitiator(me, peer);
     makeKeyPair(s);
 
-    // vector<unsigned char> publicKey(s.pk, s.pk + crypto_kx_PUBLICKEYBYTES);
-    // vector<unsigned char> payload = buildBody(peer, publicKey);
-
     unsigned char sig[crypto_sign_BYTES];
     if (!signHandshake(me, peer.data(), s.pk, sig))
     {
         return false;
     }
-    vector<unsigned char> handshakePayload(s.pk, s.pk + crypto_kx_PUBLICKEYBYTES);  // eph key
-    handshakePayload.insert(handshakePayload.end(), sig, sig + crypto_sign_BYTES);   // [eph pk][sig]
+    vector<unsigned char> handshakePayload(s.pk, s.pk + crypto_kx_PUBLICKEYBYTES);  // [eph pk]
+    handshakePayload.insert(handshakePayload.end(), sig, sig + crypto_sign_BYTES);  // [eph pk][sig]
 
     vector<unsigned char> body = buildBody(peer, handshakePayload);
 
@@ -149,13 +146,33 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
                     lock_guard<mutex> lock(terminalMutex);
 
                     cout << "\r\033[K";
-                
+        
                     // parse body here to extract sender
                     PeerId sender{};
                     vector<unsigned char> payload;
                     if (!parseBody(body, sender, payload))
                     {
                         cerr << "Malformed HANDSHAKE received." << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                        continue;
+                    }
+
+                    // check payload size
+                    if (payload.size() != HANDSHAKE_PAYLOAD_SIZE)
+                    {
+                        cerr << "Malformed payload received." << endl;
+                        cout << "\033[92myou\033[0m > " << inputBuffer << flush;
+                        continue;
+                    }
+
+                    // split
+                    const unsigned char* ephPk = payload.data();
+                    const unsigned char* sig = payload.data() + crypto_kx_PUBLICKEYBYTES;
+
+                    // verify
+                    if (!verifyHandshake(sender.data(), id.pk, ephPk, sig))
+                    {
+                        cerr << "Handshake signature invalid. Rejected." << endl;
                         cout << "\033[92myou\033[0m > " << inputBuffer << flush;
                         continue;
                     }
@@ -177,7 +194,7 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
                         }
                     }
 
-                    if (!deriveSessionKeys(s, string(payload.begin(), payload.end())))
+                    if (!deriveSessionKeys(s, string(ephPk, ephPk + crypto_kx_PUBLICKEYBYTES)))
                     {
                         cout << "\r\033[K";
                         cerr << "Failed to derive session keys." << endl;
@@ -189,7 +206,7 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
                     }
                     s.ready = true;
 
-                    cout << "Secure connection established." << endl;
+                    cout << "Verified secure connection with " << idFingerPrint(sender.data()) << endl;
 
                     string fingerPrint = sessionFingerPrint(s);
                     cout << "Session fingerprint: " << fingerPrint << endl;
