@@ -9,6 +9,7 @@ jobs:
   linux:
     name: Ubuntu (g++)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -27,6 +28,7 @@ jobs:
   macos:
     name: macOS (clang)
     runs-on: macos-latest
+    timeout-minutes: 10
     steps:
       - name: Check out code
         uses: actions/checkout@v4
