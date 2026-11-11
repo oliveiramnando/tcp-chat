@@ -1,20 +1,24 @@
 CXX      = g++
-CXXFLAGS = -std=c++20 -Wall -Wextra -g
+CXXFLAGS = -std=c++20 -Wall -Wextra -g -Isrc
 LDLIBS   = -lsodium
 
-TEST_FLAGS = $(CXXFLAGS) -fsanitize=address,undefined -I.
+# Code shared by the client, the server and the tests
+COMMON_SRCS = src/net.cpp src/crypto.cpp
+COMMON_HDRS = src/net.hpp src/crypto.hpp
+
+TEST_FLAGS = $(CXXFLAGS) -fsanitize=address,undefined
 TEST_SRCS  = $(wildcard tests/test_*.cpp)
 
 all: server client
 
-server: server.cpp net.cpp net.hpp crypto.cpp crypto.hpp
-	$(CXX) $(CXXFLAGS) server.cpp net.cpp crypto.cpp -o server $(LDLIBS)
+server: src/server.cpp $(COMMON_SRCS) $(COMMON_HDRS)
+	$(CXX) $(CXXFLAGS) src/server.cpp $(COMMON_SRCS) -o server $(LDLIBS)
 
-client: client.cpp net.cpp net.hpp crypto.cpp crypto.hpp util.cpp util.hpp
-	$(CXX) $(CXXFLAGS) client.cpp net.cpp crypto.cpp util.cpp -o client $(LDLIBS)
+client: src/client.cpp src/util.cpp src/util.hpp $(COMMON_SRCS) $(COMMON_HDRS)
+	$(CXX) $(CXXFLAGS) src/client.cpp src/util.cpp $(COMMON_SRCS) -o client $(LDLIBS)
 
-run_tests: $(TEST_SRCS) net.cpp net.hpp crypto.cpp crypto.hpp util.cpp util.hpp
-	$(CXX) $(TEST_FLAGS) $(TEST_SRCS) net.cpp crypto.cpp util.cpp -o run_tests $(LDLIBS)
+run_tests: $(TEST_SRCS) src/util.cpp src/util.hpp $(COMMON_SRCS) $(COMMON_HDRS)
+	$(CXX) $(TEST_FLAGS) $(TEST_SRCS) src/util.cpp $(COMMON_SRCS) -o run_tests $(LDLIBS)
 
 test: run_tests
 	./run_tests
