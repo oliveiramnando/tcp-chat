@@ -18,6 +18,7 @@
 
 #include <array>
 #include <chrono>
+#include <cerrno>
 #include <csignal>
 #include <fstream>
 #include <sstream>
@@ -43,16 +44,26 @@ constexpr int QUIET_MS = 300;    // how long to wait to confirm nothing arrives
 int freePort()
 {
     int s = socket(AF_INET, SOCK_STREAM, 0);
+    REQUIRE_MESSAGE(s >= 0, "socket() failed: " << strerror(errno));
+
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = 0;                                  // 0 = "pick one for me"
-    bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+
+    // ::bind, not bind: with "using namespace std", plain bind() can resolve to
+    // std::bind from <functional>, which never touches the socket.
+    int bound = ::bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+    REQUIRE_MESSAGE(bound == 0, "bind() failed: " << strerror(errno));
 
     socklen_t len = sizeof(addr);
-    getsockname(s, reinterpret_cast<sockaddr*>(&addr), &len);
+    int named = getsockname(s, reinterpret_cast<sockaddr*>(&addr), &len);
+    REQUIRE_MESSAGE(named == 0, "getsockname() failed: " << strerror(errno));
     close(s);
-    return ntohs(addr.sin_port);
+
+    int port = ntohs(addr.sin_port);
+    REQUIRE_MESSAGE(port > 0, "the OS returned port 0");
+    return port;
 }
 
 // Connects to 127.0.0.1:port. Returns the socket, or -1 if nothing is listening.
