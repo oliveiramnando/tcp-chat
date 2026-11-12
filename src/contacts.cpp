@@ -2,6 +2,7 @@
 
 #include <string>
 #include <sodium.h>
+#include <map>
 
 #include "net.hpp"
 
@@ -27,7 +28,6 @@ bool hexToId(const string& hex, PeerId& id)
     size_t decodedLen = 0;
     const char* hexEnd = nullptr;
 
-    const size_t idLen = PeerId{}.size();
     if (sodium_hex2bin(decoded.data(), decoded.size(), 
                    hex.data(), hex.size(),
                    " ", &decodedLen, &hexEnd) != 0)
@@ -43,4 +43,20 @@ bool hexToId(const string& hex, PeerId& id)
     id = decoded;
     return true;
 }
+
+
+optional<PeerId> findByName(const Contacts& c, const string& name, string& error)
+{
+    for (const auto& [id, contactName] : c)
+    {
+        if (contactName == name)
+        {
+            return id;
+        }
+    }
+
+    error = "Contact name is not in contacts";
+    return nullopt;
+}
+
 
