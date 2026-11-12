@@ -60,3 +60,29 @@ optional<PeerId> findByName(const Contacts& c, const string& name, string& error
 }
 
 
+bool addContact(Contacts& c, const PeerId& id, const string& name, string& error)
+{
+    // check if name is invalid here
+
+    // reject if name alr exists; or an id is already saved by another name
+    for (const auto& [contactId, contactName] : c)
+    {
+        if (id == contactId && name != contactName)
+        {
+            error = "ID is already saved under a different name";
+            return false;
+        }
+        if (id != contactId && name == contactName)
+        {
+            error = "Name exists for a different contact";
+            return false;
+        }
+    }
+    
+    c[id] = name;
+    return true;
+}
+
+
+
+

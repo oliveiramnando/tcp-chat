@@ -14,6 +14,10 @@ bool hexToId(const std::string& hex, PeerId& id);
 
 std::optional<PeerId> findByName(const Contacts& c, const std::string& name, std::string& error);
 
+bool addContact(Contacts& c, const PeerId& id, const std::string& name, std::string& error);
+
+
+
 #endif
 
 
