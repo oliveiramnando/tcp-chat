@@ -14,8 +14,8 @@ all: server client
 server: src/server.cpp $(COMMON_SRCS) $(COMMON_HDRS)
 	$(CXX) $(CXXFLAGS) src/server.cpp $(COMMON_SRCS) -o server $(LDLIBS)
 
-client: src/client.cpp src/util.cpp src/util.hpp $(COMMON_SRCS) $(COMMON_HDRS)
-	$(CXX) $(CXXFLAGS) src/client.cpp src/util.cpp $(COMMON_SRCS) -o client $(LDLIBS)
+client: src/client.cpp src/util.cpp src/util.hpp src/contacts.hpp $(COMMON_SRCS) $(COMMON_HDRS)
+	$(CXX) $(CXXFLAGS) src/client.cpp src/util.cpp src/contacts.cpp $(COMMON_SRCS) -o client $(LDLIBS)
 
 run_tests: $(TEST_SRCS) src/util.cpp src/util.hpp $(COMMON_SRCS) $(COMMON_HDRS)
 	$(CXX) $(TEST_FLAGS) $(TEST_SRCS) src/util.cpp $(COMMON_SRCS) -o run_tests $(LDLIBS)
