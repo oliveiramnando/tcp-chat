@@ -14,27 +14,28 @@ using namespace std;
 
 string idToHex(const PeerId& id)
 {
-    const size_t idLen = id.size();
-    string hex(idLen * 2 + 1, '\0');
-    sodium_bin2hex(hex.data(), hex.size(), id.data(), idLen);
+    string hex(id.size() * 2 + 1, '\0');
+    sodium_bin2hex(hex.data(), hex.size(), id.data(), id.size());
 
-    hex.resize(idLen * 2);
+    hex.resize(id.size() * 2);
 
-    string formatted;
-    formatted.resize(hex.size() + hex.size() / 4);
-
-    return formatted;
+    return hex;
 }
 
 bool hexToId(const string& hex, PeerId& id)
 {
+    if (hex.size() != id.size() * 2)
+    {
+        return false;
+    }
+
     PeerId decoded{};
     size_t decodedLen = 0;
     const char* hexEnd = nullptr;
 
     if (sodium_hex2bin(decoded.data(), decoded.size(), 
                    hex.data(), hex.size(),
-                   " ", &decodedLen, &hexEnd) != 0)
+                   nullptr, &decodedLen, &hexEnd) != 0)
     {
         return false;
     }
@@ -49,7 +50,7 @@ bool hexToId(const string& hex, PeerId& id)
 }
 
 
-optional<PeerId> findByName(const Contacts& c, const string& name, string& error)
+optional<PeerId> findByName(const Contacts& c, const string& name)
 {
     for (const auto& [id, contactName] : c)
     {
@@ -58,8 +59,6 @@ optional<PeerId> findByName(const Contacts& c, const string& name, string& error
             return id;
         }
     }
-
-    error = "Contact name is not in contacts";
     return nullopt;
 }
 
@@ -69,7 +68,7 @@ bool addContact(Contacts& c, const PeerId& id, const string& name, string& error
     // check if name is invalid here
     if (!isValidName(name))
     {
-        error = "Invalid Name";
+        error = "Invalid Name: " + name + "";
         return false;
     }
 
@@ -78,7 +77,7 @@ bool addContact(Contacts& c, const PeerId& id, const string& name, string& error
     {
         if (id == contactId && name != contactName)
         {
-            error = "ID is already saved under a different name";
+            error = "ID is already saved under a different name as '" + contactName + "'";
             return false;
         }
         if (id != contactId && name == contactName)
@@ -95,26 +94,40 @@ bool addContact(Contacts& c, const PeerId& id, const string& name, string& error
 
 bool loadContacts(const string& path, Contacts& c, vector<string>& warnings)
 {
-    const filesystem::path filePath = filesystem::path(path) / "contacts.txt";
+    c.clear();
 
-    if (!filesystem::exists(filePath))
+    error_code ec;
+    if (!filesystem::exists(path, ec))
     {
-        return true;
+        return !ec; // no file yet, not an error
     }
 
-    ifstream inFile(filePath);
-    if (!inFile.is_open())
+    ifstream inFile(path);
+    if (!inFile)
     {
         return false;
     }
 
     string line;
+    size_t lineNumber = 0;
     while (getline(inFile, line))
     {
+        ++lineNumber;
+        const string where = "line " + to_string(lineNumber) + ": ";
+
+        if (!line.empty() && line.back() == '\r')
+        {
+            line.pop_back();
+        }
+        if (line.empty() || line[0] == '#')
+        {
+            continue;
+        }
+
         size_t colonIdx = line.find(" : ");
         if (colonIdx == string::npos)
         {
-            cerr << "Client sender does not have a name" << endl;
+            warnings.push_back(where + "expected '<hex id> : < name'");
             continue;
         }
 
@@ -124,41 +137,61 @@ bool loadContacts(const string& path, Contacts& c, vector<string>& warnings)
         PeerId id;
         if (!hexToId(stringId, id))
         {
+            warnings.push_back(where + "Invalid ID");
             return false;
         }
 
-        c[id] = name;
+        string error;
+        if (!addContact(c, id, name, error))
+        {
+            warnings.push_back(where + error);
+        }
     }
 
-
-    return true;
+    return !inFile.bad();
 }
 
 
 bool saveContacts(const string& path, const Contacts& c)
 {
-    const filesystem::path filePath = filesystem::path(path) / "contacts.txt";
+    const string tmpPath = path + ".tmp";
+    error_code ec;
 
-    ofstream outFile(filePath);
-    if (!outFile.is_open())
     {
-        return false;
-    }
-
-    for (const auto& [contactId, contactName] : c)
-    {
-        string id = idToHex(contactId);
-        outFile << id << " : " << contactName << "\n";
-
+        ofstream outFile(tmpPath, ios::trunc);
         if (!outFile)
         {
             return false;
         }
-    }
-    
-    outFile.close();
 
-    return !outFile.fail();
+        filesystem::permissions(tmpPath, filesystem::perms::owner_read | filesystem::perms::owner_write, filesystem::perm_options::replace, ec);
+        if (ec)
+        {
+            filesystem::remove(tmpPath, ec);
+            return false;
+        }
+
+        for (const auto& [id, name] : c)
+        {
+            outFile << idToHex(id) << ' ' << name << '\n';
+        }
+
+        outFile.close();
+        if (outFile.fail())
+        {
+            filesystem::remove(tmpPath, ec);
+            return false;
+        }
+    }
+
+    filesystem::rename(tmpPath, path, ec);
+    if (ec)
+    {
+        filesystem::remove(tmpPath, ec);
+        return false;
+    }
+
+    return true; 
 }
 
 
