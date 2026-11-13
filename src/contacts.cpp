@@ -124,21 +124,21 @@ bool loadContacts(const string& path, Contacts& c, vector<string>& warnings)
             continue;
         }
 
-        size_t colonIdx = line.find(" : ");
-        if (colonIdx == string::npos)
+        size_t spaceIdx = line.find(" ");
+        if (spaceIdx == string::npos)
         {
-            warnings.push_back(where + "expected '<hex id> : < name'");
+            warnings.push_back(where + "expected '<hex id> < name'");
             continue;
         }
 
-        string stringId = line.substr(0, colonIdx);
-        string name = line.substr(colonIdx + 3);
+        string stringId = line.substr(0, spaceIdx);
+        string name = line.substr(spaceIdx + 1);
 
         PeerId id;
         if (!hexToId(stringId, id))
         {
             warnings.push_back(where + "Invalid ID");
-            return false;
+            continue;
         }
 
         string error;
