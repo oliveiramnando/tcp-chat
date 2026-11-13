@@ -1,5 +1,5 @@
 #include "doctest.h"
-#include "net.hpp"
+#include "../src/net.hpp"
 
 #include <cstring>
 #include <set>

@@ -1,5 +1,5 @@
 #include "doctest.h"
-#include "crypto.hpp"
+#include "../src/crypto.hpp"
 
 #include <cstring>
 #include <string>

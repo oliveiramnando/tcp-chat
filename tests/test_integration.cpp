@@ -4,8 +4,8 @@
 // Run from the project root after building the server (make test does both).
 
 #include "doctest.h"
-#include "net.hpp"
-#include "crypto.hpp"
+#include "../src/net.hpp"
+#include "../src/crypto.hpp"
 
 #include <arpa/inet.h>
 #include <fcntl.h>
