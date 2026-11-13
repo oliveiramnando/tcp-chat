@@ -6,6 +6,9 @@ LDLIBS   = -lsodium
 COMMON_SRCS = src/net.cpp src/crypto.cpp
 COMMON_HDRS = src/net.hpp src/crypto.hpp
 
+CLIENT_SRCS = src/util.cpp src/contacts.cpp
+CLIENT_HDRS = src/util.hpp src/contacts.hpp
+
 TEST_FLAGS = $(CXXFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all
 TEST_SRCS  = $(wildcard tests/test_*.cpp)
 
@@ -14,16 +17,16 @@ all: server client
 server: src/server.cpp $(COMMON_SRCS) $(COMMON_HDRS)
 	$(CXX) $(CXXFLAGS) src/server.cpp $(COMMON_SRCS) -o server $(LDLIBS)
 
-client: src/client.cpp src/util.cpp src/util.hpp src/contacts.hpp $(COMMON_SRCS) $(COMMON_HDRS)
-	$(CXX) $(CXXFLAGS) src/client.cpp src/util.cpp src/contacts.cpp $(COMMON_SRCS) -o client $(LDLIBS)
+client: src/client.cpp $(CLIENT_SRCS) $(CLIENT_HDRS) $(COMMON_SRCS) $(COMMON_HDRS)
+	$(CXX) $(CXXFLAGS) src/client.cpp $(CLIENT_SRCS) $(COMMON_SRCS) -o client $(LDLIBS)
 
-run_tests: $(TEST_SRCS) src/util.cpp src/util.hpp $(COMMON_SRCS) $(COMMON_HDRS)
-	$(CXX) $(TEST_FLAGS) $(TEST_SRCS) src/util.cpp $(COMMON_SRCS) -o run_tests $(LDLIBS)
+run_tests: $(TEST_SRCS) $(CLIENT_SRCS) $(CLIENT_HDRS) $(COMMON_SRCS) $(COMMON_HDRS)
+	$(CXX) $(TEST_FLAGS) $(TEST_SRCS) $(CLIENT_SRCS) $(COMMON_SRCS) -o run_tests $(LDLIBS)
 
 test: run_tests server
 	./run_tests
 
 clean:
-	rm -f server client run_tests
+	rm -f server client run_tests server_test.log
 
 .PHONY: all clean test
