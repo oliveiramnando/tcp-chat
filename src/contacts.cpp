@@ -3,8 +3,12 @@
 #include <string>
 #include <sodium.h>
 #include <map>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 
 #include "net.hpp"
+#include "util.hpp"
 
 using namespace std;
 
@@ -63,6 +67,11 @@ optional<PeerId> findByName(const Contacts& c, const string& name, string& error
 bool addContact(Contacts& c, const PeerId& id, const string& name, string& error)
 {
     // check if name is invalid here
+    if (!isValidName(name))
+    {
+        error = "Invalid Name";
+        return false;
+    }
 
     // reject if name alr exists; or an id is already saved by another name
     for (const auto& [contactId, contactName] : c)
@@ -84,5 +93,72 @@ bool addContact(Contacts& c, const PeerId& id, const string& name, string& error
 }
 
 
+bool loadContacts(const string& path, Contacts& c, vector<string>& warnings)
+{
+    const filesystem::path filePath = filesystem::path(path) / "contacts.txt";
+
+    if (!filesystem::exists(filePath))
+    {
+        return true;
+    }
+
+    ifstream inFile(filePath);
+    if (!inFile.is_open())
+    {
+        return false;
+    }
+
+    string line;
+    while (getline(inFile, line))
+    {
+        size_t colonIdx = line.find(" : ");
+        if (colonIdx == string::npos)
+        {
+            cerr << "Client sender does not have a name" << endl;
+            continue;
+        }
+
+        string stringId = line.substr(0, colonIdx);
+        string name = line.substr(colonIdx + 3);
+
+        PeerId id;
+        if (!hexToId(stringId, id))
+        {
+            return false;
+        }
+
+        c[id] = name;
+    }
+
+
+    return true;
+}
+
+
+bool saveContacts(const string& path, const Contacts& c)
+{
+    const filesystem::path filePath = filesystem::path(path) / "contacts.txt";
+
+    ofstream outFile(filePath);
+    if (!outFile.is_open())
+    {
+        return false;
+    }
+
+    for (const auto& [contactId, contactName] : c)
+    {
+        string id = idToHex(contactId);
+        outFile << id << " : " << contactName << "\n";
+
+        if (!outFile)
+        {
+            return false;
+        }
+    }
+    
+    outFile.close();
+
+    return !outFile.fail();
+}
 
 
