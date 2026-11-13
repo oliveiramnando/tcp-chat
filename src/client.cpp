@@ -30,6 +30,7 @@
 #include "net.hpp"
 #include "crypto.hpp"
 #include "util.hpp"
+#include "contacts.hpp"
 
 using namespace std;
 
@@ -91,7 +92,7 @@ bool startHandshake(int sock, const Identity& me, const PeerId& peer, Session& s
 }
 
 
-void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity& id)
+void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity& id, Contacts& contacts)
 {
     while (true)
     {
@@ -301,7 +302,7 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
     }
 }
 
-void sendMsg(int clientSocket, const string& name, map<PeerId, Session>& sessions, const Identity& id)
+void sendMsg(int clientSocket, const string& name, map<PeerId, Session>& sessions, const Identity& id, Contacts& contacts, const string& contactsPath)
 {
     {
         lock_guard<mutex> lock(terminalMutex);
@@ -531,6 +532,24 @@ int main(int argc, char* argv[])
 
     cout << "Your fingerprint: " << idFingerPrint(id.pk) << endl;
 
+    // Loading contacts
+    Contacts contacts;
+
+    const string contactsPath = profileDir + '/' + CONTACTS_FILE;
+    vector<string> contactsWarning;
+
+    if (!loadContacts(contactsPath, contacts, contactsWarning))
+    {
+        cerr << "Failed to read contacts file: " << contactsPath << endl;
+        return 1;
+    }
+
+    for (const string& warning : contactsWarning)
+    {
+        cerr << "contacts: " << warning << endl;
+    }
+    cout << "Loaded " << contacts.size() << " contact(s)." << endl;
+
     // create client socket
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocket < 0)
@@ -654,8 +673,8 @@ int main(int argc, char* argv[])
     map<PeerId, Session> sessions;
 
     // threads
-    thread threadReceive(receiveMsg, clientSocket, ref(sessions), cref(id));
-    thread threadSend(sendMsg, clientSocket, name, ref(sessions), cref(id));
+    thread threadReceive(receiveMsg, clientSocket, ref(sessions), cref(id), ref(contacts));
+    thread threadSend(sendMsg, clientSocket, name, ref(sessions), cref(id), ref(contacts), contactsPath);
 
     threadReceive.join();
     threadSend.join();
