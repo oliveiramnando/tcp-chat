@@ -3,6 +3,6 @@
 
 #include <string>
 
-bool isValidProfileName(const std::string& name);
+bool isValidName(const std::string& name);
 
 #endif

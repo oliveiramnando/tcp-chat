@@ -507,7 +507,7 @@ int main(int argc, char* argv[])
         profile = argv[3];
     }
 
-    if (!isValidProfileName(profile))
+    if (!isValidName(profile))
     {
         cerr << "Invalid profile name. Use 1-32 letters, digits, '-' or '_'." << endl;
         return 1;

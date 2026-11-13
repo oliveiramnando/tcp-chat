@@ -4,7 +4,7 @@
 using namespace std;
 
 // Profile names become folder names, so allow only safe characters.
-bool isValidProfileName(const string& name)
+bool isValidName(const string& name)
 {
     if (name.empty() || name.size() > 32)
     {
