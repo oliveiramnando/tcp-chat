@@ -15,6 +15,8 @@ constexpr char CONTACTS_FILE[] = "contacts";
 std::string idToHex(const PeerId& id);
 bool hexToId(const std::string& hex, PeerId& id);
 
+std::string displayName(const Contacts& c, const PeerId& id);
+
 std::optional<PeerId> findByName(const Contacts& c, const std::string& name);
 
 bool addContact(Contacts& c, const PeerId& id, const std::string& name, std::string& error);

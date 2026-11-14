@@ -226,7 +226,7 @@ void receiveMsg(int clientSocket, map<PeerId, Session>& sessions, const Identity
                     }
                     s.ready = true;
 
-                    cout << "Verified secure connection with " << idFingerPrint(sender.data()) << endl;
+                    cout << "Verified secure connection with " << displayName(contacts, sender) << endl;
 
                     string fingerPrint = sessionFingerPrint(s);
                     cout << "Session fingerprint: " << fingerPrint << endl;
@@ -346,7 +346,7 @@ void sendMsg(int clientSocket, const string& name, map<PeerId, Session>& session
                     for (const auto& uid : userIds)
                     { 
                         userIdVector.push_back(uid);
-                        cout << n << ") " << idFingerPrint(uid.data()) << endl;
+                        cout << n << ") " << displayName(contacts, uid) << endl;
                         n++;
                     }
                     inputBuffer.clear();
@@ -388,7 +388,7 @@ void sendMsg(int clientSocket, const string& name, map<PeerId, Session>& session
                         }
                         else
                         {
-                            cout << "\r\033[K" << "Now chatting with " << idFingerPrint(selected.data()) << endl;
+                            cout << "\r\033[K" << "Now chatting with " << displayName(contacts, selected) << endl;
                             currentPeer = selected;
 
                             cout << "Establishing secure connection..." << endl;

@@ -9,6 +9,7 @@
 
 #include "net.hpp"
 #include "util.hpp"
+#include "crypto.hpp"
 
 using namespace std;
 
@@ -20,6 +21,19 @@ string idToHex(const PeerId& id)
     hex.resize(id.size() * 2);
 
     return hex;
+}
+
+string displayName(const Contacts& c, const PeerId& id)
+{
+    auto it = c.find(id);
+    if (it != c.end())
+    {
+        return it->second;    
+    }
+    else
+    {
+        return idFingerPrint(id.data());
+    }
 }
 
 bool hexToId(const string& hex, PeerId& id)
